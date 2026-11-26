@@ -19,6 +19,11 @@ export interface VideoRequest {
    * pictures the engine kept from it. Left out by an older engine: the job folder is made from the passages alone.
    */
   sources?: JobSource[];
+  /**
+   * The folder this video is copied into once finished (docs/JOB-FOLDER.md, "The library"), as the engine picked it
+   * for the video's project. Left out: the service's own library (SCENES_LIBRARY_DIR), or none.
+   */
+  library?: string;
   limits: Limits;
   /** Skills beyond the service's own, for this video only: a project's packs, sent by name with their files. */
   skills?: ExtraSkill[];
@@ -179,6 +184,8 @@ export function readRequest(body: unknown, styles: string[]): { request: VideoRe
     }
     return raw.trim();
   };
+  const library = optText("library");
+  if (library && !library.startsWith("/") && !/^[A-Za-z]:[\\/]/.test(library)) problems.push("library: an absolute path, or leave it out.");
   const agent = optText("agent");
   const model = optText("model");
   const effort = optText("effort");
@@ -189,5 +196,5 @@ export function readRequest(body: unknown, styles: string[]): { request: VideoRe
   const reviewEffort = optText("reviewEffort");
   if ((reviewModel || reviewEffort) && !reviewAgent) problems.push("reviewModel, reviewEffort: only with reviewAgent, the agent they were picked for.");
   if (problems.length) return { problems };
-  return { request: { id, title, brief, assumes, frame: { width, height }, ...(target !== undefined ? { targetSeconds: target } : {}), style, ...(agent ? { agent } : {}), ...(model ? { model } : {}), ...(effort ? { effort } : {}), passages, ...(sources.length ? { sources } : {}), limits: readLimits(b.limits), ...(skills.length ? { skills } : {}), ...(review !== undefined ? { review } : {}), ...(reviewAgent ? { reviewAgent } : {}), ...(reviewModel ? { reviewModel } : {}), ...(reviewEffort ? { reviewEffort } : {}) } };
+  return { request: { id, title, brief, assumes, frame: { width, height }, ...(target !== undefined ? { targetSeconds: target } : {}), style, ...(agent ? { agent } : {}), ...(model ? { model } : {}), ...(effort ? { effort } : {}), passages, ...(sources.length ? { sources } : {}), ...(library ? { library } : {}), limits: readLimits(b.limits), ...(skills.length ? { skills } : {}), ...(review !== undefined ? { review } : {}), ...(reviewAgent ? { reviewAgent } : {}), ...(reviewModel ? { reviewModel } : {}), ...(reviewEffort ? { reviewEffort } : {}) } };
 }

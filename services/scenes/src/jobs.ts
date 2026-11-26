@@ -1091,11 +1091,11 @@ export class Jobs {
     this.save(job);
   }
 
-  /** The finished video copied out to the library, once per job; nothing when no library is set. */
+  /** The finished video copied out to the library (the request's, else the service's), once per job; nothing when neither is set. */
   private toLibrary(job: JobRecord): void {
     if (job.library && existsSync(job.library)) return;
     try {
-      const to = copyToLibrary(this.o.libraryDir, job.result?.title || job.request.title, join(this.folder(job.id), "video.mp4"));
+      const to = copyToLibrary(job.request.library ?? this.o.libraryDir, job.result?.title || job.request.title, join(this.folder(job.id), "video.mp4"));
       if (to) job.library = to;
     } catch (e) {
       this.log(`job ${job.id}: the video could not be copied to the library (${(e as Error).message})`);
