@@ -9,13 +9,16 @@
  * whether it still does, so a turn the connector dropped is not waited on for ever. A job that was being made when the
  * service stopped, or whose turn was dropped, is carried on from what is on disk: a new turn told what exists, or the
  * voicing and render again (speech already made is never bought again), at most `MAX_RESUMES` times a job, each after
- * a longer wait. Finished jobs stay. When the fresh viewer is on, a finished video is watched once by a blind viewer
+ * a longer wait. Each job's folder also holds a note for the agent, its sources and what was read from them
+ * (src/folder.ts, docs/JOB-FOLDER.md). Finished jobs stay a while, then are cleaned up: a job is kept while among the last
+ * few or recent, never while being made. When the fresh viewer is on, a finished video is watched once by a blind viewer
  * turn and its maker gets one more turn with the viewer's notes (src/review.ts), never more than once a video.
  */
 import { randomBytes, timingSafeEqual } from "node:crypto";
-import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { join, relative, sep } from "node:path";
 import { readLimit, type AgentProblem, type Connector, type LimitReset } from "./connector.ts";
+import { copyToLibrary, KEEP, toRemove, writeJobFolder, type Keep } from "./folder.ts";
 import { finalBuild, renderVideo, voiceAll } from "./produce.ts";
 import { forVideo, INSTRUCTIONS, systemPrompt, turnPrompt } from "./prompt.ts";
 import { writeSkills } from "./skills.ts";
@@ -93,6 +96,8 @@ export interface JobRecord {
    * again, and their note in their own words. The video it came from is left as it was.
    */
   remake?: Remake;
+  /** Where the finished video was copied in the library, once it was (src/folder.ts). */
+  library?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -168,6 +173,14 @@ export interface JobsOptions {
   heartbeat?: Partial<Heartbeat>;
   /** The clock the heartbeat reads (tests move it to play a sleep). */
   now?: () => number;
+  /** The engine's address, where the pictures of a video's sources are fetched from for its job folder; none fetches none. */
+  engineUrl?: string;
+  /** How the job folder's pictures are fetched (tests answer them). */
+  fetch?: typeof fetch;
+  /** The library folder a finished video is copied into; none copies nothing. */
+  libraryDir?: string;
+  /** How many jobs, and how many days of them, are kept after they end (src/folder.ts, `KEEP` by default). */
+  keep?: Keep;
 }
 
 /** The most a job is carried on by itself; the person's or the engine's resume does not count. */
@@ -262,6 +275,36 @@ export class Jobs {
     this.now = o.now ?? Date.now;
     mkdirSync(o.dataDir, { recursive: true });
     this.load();
+    this.cleanUp();
+  }
+
+  /**
+   * Removes the folders of jobs that ended and are neither among the last `keep.jobs` changed nor changed in the last
+   * `keep.days` days. A job being made is never removed, and nothing in the data folder but a job's folder is touched.
+   */
+  cleanUp(): string[] {
+    const busy = (job: JobRecord) => this.running.has(job.id) || job.state === "writing" || job.state === "voicing" || job.state === "rendering";
+    const gone = toRemove([...this.jobs.values()], busy, this.o.keep ?? KEEP, Date.now());
+    for (const job of gone) {
+      try {
+        rmSync(this.folder(job.id), { recursive: true, force: true });
+        this.jobs.delete(job.id);
+        this.drafts.delete(job.id);
+      } catch (e) {
+        this.log(`job ${job.id}: its folder could not be removed (${(e as Error).message})`);
+      }
+    }
+    if (gone.length) this.log(`removed ${gone.length} old job folder${gone.length === 1 ? "" : "s"}: ${gone.map((j) => j.id).join(", ")}`);
+    return gone.map((j) => j.id);
+  }
+
+  /** Writes the job folder's note, sources and what was read from them; a part that cannot be made is only logged. */
+  private async prepare(job: JobRecord): Promise<void> {
+    try {
+      await writeJobFolder(this.folder(job.id), job.request, { ...(this.o.engineUrl ? { engineUrl: this.o.engineUrl } : {}), ...(this.o.fetch ? { fetch: this.o.fetch } : {}), log: (line) => this.log(`job ${job.id}: ${line}`) });
+    } catch (e) {
+      this.log(`job ${job.id}: its folder's sources could not be written (${(e as Error).message})`);
+    }
   }
 
   /**
@@ -315,7 +358,7 @@ export class Jobs {
     mkdirSync(this.folder(job.id), { recursive: true });
     this.drafts.set(job.id, emptyDraft());
     this.save(job);
-    void this.make(job, {});
+    void this.make(job, { prepare: true });
     return job;
   }
 
@@ -372,10 +415,11 @@ export class Jobs {
     if (!draft.script?.scenes.some((s) => s.id === ask.beat)) return { job: old, refused: { code: "no_beat", message: `This video has no beat ${ask.beat}.` } };
     const to = this.folder(ask.id);
     // Everything the agent made (builds, stills, voice, pictures, its folder), but not the old video's own record or file.
-    const left = new Set(["job.json", "job.json.tmp", "draft.json", "draft.json.tmp", "video.mp4"]);
+    const left = new Set(["job.json", "job.json.tmp", "draft.json", "draft.json.tmp", "video.mp4", "README.md", "sources", "extracted"]);
     cpSync(from, to, { recursive: true, filter: (path) => {
       const inside = relative(from, path);
-      return !left.has(inside) && inside !== "review" && !inside.startsWith(`review${sep}`);
+      const top = inside.split(sep)[0]!;
+      return !left.has(top) && top !== "review";
     } });
     // Paths into the old folder (the voice's files) point into the copy.
     const quoted = (path: string) => JSON.stringify(`${path}${sep}`).slice(1, -1);
@@ -407,7 +451,7 @@ export class Jobs {
     this.saveDraft(job.id, copy);
     this.save(job);
     this.log(`job ${job.id}: a remake of ${ask.beat} in ${id}${note ? `, the person's note: ${note.slice(0, 200)}` : ", with no note"}`);
-    void this.make(job, {});
+    void this.make(job, { prepare: true });
     return { job };
   }
 
@@ -515,13 +559,14 @@ export class Jobs {
    * Makes a video: the writing, then the voicing and render. `carry` (why the last turn was cut off, "" when not known)
    * makes the first turn a carry-on told what exists; `produce` skips the writing; `delayMs` waits first.
    */
-  private async make(job: JobRecord, o: { revise?: string[]; carry?: string; produce?: boolean; delayMs?: number }): Promise<void> {
+  private async make(job: JobRecord, o: { revise?: string[]; carry?: string; produce?: boolean; delayMs?: number; prepare?: boolean }): Promise<void> {
     const abort = new AbortController();
     this.running.set(job.id, { abort });
     // The voice of this run: a change of voice while it is made reaches the next video, not this one.
     const voice = voiceNow(this.o.voice);
     this.pinned.set(job.id, voice);
     try {
+      if (o.prepare) await this.prepare(job);
       if (o.delayMs) await pause(o.delayMs, abort.signal);
       if (abort.signal.aborted) return;
       if (!o.produce) {
@@ -545,6 +590,8 @@ export class Jobs {
       // A stopped run can end after a resume started the next one: only its own entry goes.
       if (this.running.get(job.id)?.abort === abort) this.running.delete(job.id);
       if (this.pinned.get(job.id) === voice) this.pinned.delete(job.id);
+      // A job that ended makes room: old ones are cleaned up.
+      if (!this.running.has(job.id)) this.cleanUp();
     }
   }
 
@@ -1040,7 +1087,19 @@ export class Jobs {
     job.state = "done";
     this.setProgress(job, 1);
     this.stepTo(job, "Done");
+    this.toLibrary(job);
     this.save(job);
+  }
+
+  /** The finished video copied out to the library, once per job; nothing when no library is set. */
+  private toLibrary(job: JobRecord): void {
+    if (job.library && existsSync(job.library)) return;
+    try {
+      const to = copyToLibrary(this.o.libraryDir, job.result?.title || job.request.title, join(this.folder(job.id), "video.mp4"));
+      if (to) job.library = to;
+    } catch (e) {
+      this.log(`job ${job.id}: the video could not be copied to the library (${(e as Error).message})`);
+    }
   }
 
   /** One render at a time on this computer: each uses several Chrome tabs and most of the processor. */

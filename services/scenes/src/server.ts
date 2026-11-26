@@ -19,6 +19,7 @@
  *   POST /videos/:id/revise         a new writing round with Open Sourcebook's checker's problems
  *   POST /videos/:id/remake-scene   { id, beat, note?, agent?, model?, effort? }: a new video, copied from this finished
  *                                   one, with that beat made again as the person asks   → 202 { id }, 409 { error, message }
+ *   POST /videos/:id/show-files     opens the video's job folder in this computer's file manager   → 200 { folder }
  *   POST /videos/:id/resume         carry a failed or stopped video on from its draft   → 200 the job, 409 { error }
  *                                   { withoutSound: true }: finished with no voice, after the voice could not speak
  *   POST /audio                     start voicing an audio (idempotent by id)  → 202 { id }
@@ -38,6 +39,7 @@ import { join } from "node:path";
 import { timingSafeEqual } from "node:crypto";
 import type { Connector } from "./connector.ts";
 import { view, type Jobs } from "./jobs.ts";
+import { openFolder } from "./folder.ts";
 import { stylePreview } from "./preview.ts";
 import { readRequest } from "./request.ts";
 import type { SpeedBook } from "./speed.ts";
@@ -62,6 +64,8 @@ export interface ServerOptions {
   /** How fast this computer has drawn each style (src/speed.ts); /status says it. None: /status says nothing about time. */
   speed?: SpeedBook;
   log?: (line: string) => void;
+  /** Opens a folder in the file manager (src/folder.ts, `openFolder`, by default); tests watch it. */
+  showFolder?: (folder: string) => Promise<void>;
 }
 
 export const MAKER = {
@@ -135,7 +139,7 @@ export function createScenesServer(o: ServerOptions): Server {
       const job = o.jobs.create(read.request);
       return send(response, 202, { id: job.id });
     }
-    const video = /^\/videos\/([^/]+)(?:\/(file|stop|revise|resume|remake-scene))?$/.exec(path);
+    const video = /^\/videos\/([^/]+)(?:\/(file|stop|revise|resume|remake-scene|show-files))?$/.exec(path);
     if (video) {
       const id = decodeURIComponent(video[1]!);
       const what = video[2];
@@ -158,6 +162,16 @@ export function createScenesServer(o: ServerOptions): Server {
         if (r.refused) return send(response, r.refused.code === "no_beat" ? 404 : 409, { error: r.refused.code, message: r.refused.message });
         if (!r.job) return send(response, 404, { error: "not_found" });
         return send(response, 202, { id: r.job.id });
+      }
+      if (what === "show-files" && request.method === "POST") {
+        const folder = o.jobs.folder(id);
+        if (!o.jobs.get(id) || !existsSync(folder)) return send(response, 404, { error: "not_found", message: "This video's files are no longer on this computer." });
+        try {
+          await (o.showFolder ?? openFolder)(folder);
+        } catch (e) {
+          return send(response, 500, { error: "cannot_open", message: `The folder could not be opened: ${(e as Error).message}` });
+        }
+        return send(response, 200, { folder });
       }
       if (what === "file" && request.method === "GET") {
         const job = o.jobs.get(id);

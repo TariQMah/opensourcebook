@@ -14,6 +14,11 @@ export interface VideoRequest {
   model?: string;
   effort?: string;
   passages: Passage[];
+  /**
+   * The video's sources as the engine knows them, for its job folder (docs/JOB-FOLDER.md): where each came from and the
+   * pictures the engine kept from it. Left out by an older engine: the job folder is made from the passages alone.
+   */
+  sources?: JobSource[];
   limits: Limits;
   /** Skills beyond the service's own, for this video only: a project's packs, sent by name with their files. */
   skills?: ExtraSkill[];
@@ -26,6 +31,70 @@ export interface VideoRequest {
   reviewAgent?: string;
   reviewModel?: string;
   reviewEffort?: string;
+}
+
+/** One source of a video: its id (the passages' `sourceId`), title, kind, and its file on disk or its address. */
+export interface JobSource {
+  id: string;
+  title: string;
+  kind: string;
+  url?: string;
+  /** The original file on this computer, when the source is one: linked from the job folder, never copied. */
+  path?: string;
+  pictures?: SourcePicture[];
+}
+
+/** A picture the engine kept from a source: its own address on the engine (`/v1/assets/<id>`) and what it knows of it. */
+export interface SourcePicture {
+  url: string;
+  kind: string;
+  caption?: string;
+  page?: number;
+  timestampMs?: number;
+  width?: number;
+  height?: number;
+  contentType?: string;
+}
+
+const MAX_SOURCES = 200;
+const MAX_SOURCE_PICTURES = 200;
+const ASSET_PATH = /^\/v1\/assets\/[A-Za-z0-9._~-]+$/;
+const PICTURE_KINDS = new Set(["image", "figure", "frame", "slide", "thumbnail"]);
+
+/** The sources of a request, checked: a list of { id, title, kind, url?, path?, pictures? }, pictures only of the engine's own. */
+export function readSources(raw: unknown, problems: string[]): JobSource[] {
+  if (raw === undefined || raw === null) return [];
+  if (!Array.isArray(raw) || raw.length > MAX_SOURCES) {
+    problems.push(`sources: a list of at most ${MAX_SOURCES} { id, title, kind, url?, path?, pictures? }.`);
+    return [];
+  }
+  const out: JobSource[] = [];
+  const text = (v: unknown) => (typeof v === "string" ? v.trim() : "");
+  const num = (v: unknown) => (typeof v === "number" && Number.isFinite(v) && v >= 0 ? v : undefined);
+  for (const [i, entry] of raw.entries()) {
+    const e = (typeof entry === "object" && entry !== null ? entry : {}) as Record<string, unknown>;
+    const id = text(e.id);
+    if (!id || id.length > 200 || out.some((s) => s.id === id)) {
+      problems.push(`sources[${i}].id: a unique id is required.`);
+      continue;
+    }
+    const path = text(e.path);
+    if (path && !path.startsWith("/") && !/^[A-Za-z]:[\\/]/.test(path)) problems.push(`sources[${i}].path: an absolute path, or leave it out.`);
+    const pictures: SourcePicture[] = [];
+    for (const raw of (Array.isArray(e.pictures) ? e.pictures : []).slice(0, MAX_SOURCE_PICTURES)) {
+      const p = (typeof raw === "object" && raw !== null ? raw : {}) as Record<string, unknown>;
+      const url = text(p.url);
+      const kind = text(p.kind);
+      // Only the engine's own pictures, by their address on it: nothing else is fetched.
+      if (!ASSET_PATH.test(url) || !PICTURE_KINDS.has(kind)) continue;
+      const caption = text(p.caption).slice(0, 500);
+      const contentType = text(p.contentType);
+      pictures.push({ url, kind, ...(caption ? { caption } : {}), ...(num(p.page) !== undefined ? { page: num(p.page)! } : {}), ...(num(p.timestampMs) !== undefined ? { timestampMs: num(p.timestampMs)! } : {}), ...(num(p.width) ? { width: num(p.width)! } : {}), ...(num(p.height) ? { height: num(p.height)! } : {}), ...(contentType ? { contentType } : {}) });
+    }
+    const url = text(e.url);
+    out.push({ id, title: text(e.title).slice(0, 300) || "Untitled source", kind: text(e.kind).slice(0, 40) || "source", ...(/^https?:\/\//.test(url) ? { url } : {}), ...(path ? { path } : {}), ...(pictures.length ? { pictures } : {}) });
+  }
+  return out;
 }
 
 /** One skill sent with a video: its folder name and its files by their path inside it (`SKILL.md`, `references/x.md`). */
@@ -100,6 +169,7 @@ export function readRequest(body: unknown, styles: string[]): { request: VideoRe
     passages.push(passage);
   }
   const skills = readSkills(b.skills, problems);
+  const sources = readSources(b.sources, problems);
   const optText = (key: string): string | undefined => {
     const raw = b[key];
     if (raw === undefined || raw === null) return undefined;
@@ -119,5 +189,5 @@ export function readRequest(body: unknown, styles: string[]): { request: VideoRe
   const reviewEffort = optText("reviewEffort");
   if ((reviewModel || reviewEffort) && !reviewAgent) problems.push("reviewModel, reviewEffort: only with reviewAgent, the agent they were picked for.");
   if (problems.length) return { problems };
-  return { request: { id, title, brief, assumes, frame: { width, height }, ...(target !== undefined ? { targetSeconds: target } : {}), style, ...(agent ? { agent } : {}), ...(model ? { model } : {}), ...(effort ? { effort } : {}), passages, limits: readLimits(b.limits), ...(skills.length ? { skills } : {}), ...(review !== undefined ? { review } : {}), ...(reviewAgent ? { reviewAgent } : {}), ...(reviewModel ? { reviewModel } : {}), ...(reviewEffort ? { reviewEffort } : {}) } };
+  return { request: { id, title, brief, assumes, frame: { width, height }, ...(target !== undefined ? { targetSeconds: target } : {}), style, ...(agent ? { agent } : {}), ...(model ? { model } : {}), ...(effort ? { effort } : {}), passages, ...(sources.length ? { sources } : {}), limits: readLimits(b.limits), ...(skills.length ? { skills } : {}), ...(review !== undefined ? { review } : {}), ...(reviewAgent ? { reviewAgent } : {}), ...(reviewModel ? { reviewModel } : {}), ...(reviewEffort ? { reviewEffort } : {}) } };
 }
