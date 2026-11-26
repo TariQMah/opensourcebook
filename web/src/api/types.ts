@@ -111,6 +111,18 @@ export interface Project {
   folder?: string;
   /** When the linked folder was last looked at. */
   folderCheckedAt?: string;
+  /** The folder on Home it is kept in; absent, it is on Home itself. */
+  groupId?: string;
+}
+
+/** A folder on Home that projects are kept in (engine/docs/api.md, "Folders on Home"). */
+export interface ProjectGroup {
+  id: string;
+  title: string;
+  /** How many projects it holds, archived ones too. */
+  projects: number;
+  createdAt: string;
+  updatedAt: string;
 }
 
 /** What one look at a linked folder found, by each file's path from the folder (engine/docs/api.md). */

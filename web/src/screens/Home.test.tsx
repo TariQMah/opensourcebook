@@ -329,7 +329,7 @@ test("a project card's menu opens with room: placed against the window, never gi
   const { top, bottom } = menu.style;
   expect(Boolean(top && top !== "auto") && Boolean(bottom && bottom !== "auto")).toBe(false);
   expect(menu.style.position).toBe("fixed");
-  expect(within(menu).getAllByRole("menuitem").map((b) => b.textContent)).toEqual(["Rename", "Archive" + "keeps everything", "Delete…"]);
+  expect(within(menu).getAllByRole("menuitem").map((b) => b.textContent)).toEqual(["Rename", "Move to folder…", "Archive" + "keeps everything", "Delete…"]);
 });
 
 test("deleting a live project can be turned into archiving from the question", async () => {

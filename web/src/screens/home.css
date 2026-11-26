@@ -78,6 +78,33 @@
 .mini.quietdanger:hover, .mini.quietdanger:focus-visible { color: var(--danger); background: var(--dangerSoft); border-color: transparent; }
 .gone-note { margin: var(--space-8) 0 0; color: var(--muted); font-size: var(--fs-caption); }
 
+/* Folders on Home: a card like a project's with a folder for its picture, and a folder's own heading. */
+.fface { display: grid; place-items: center; aspect-ratio: 16 / 10; background: var(--fill); color: var(--muted); }
+.fface .ico { width: 34px; height: 34px; }
+.pc.fc:hover .fface { color: var(--primaryText); }
+.folder-head { display: flex; flex-direction: column; gap: var(--space-8); margin-bottom: var(--space-20); }
+.folder-back { display: inline-flex; align-items: center; gap: 4px; align-self: flex-start; color: var(--muted); text-decoration: none; }
+.folder-back .ico { width: 14px; height: 14px; }
+.folder-title { display: flex; align-items: center; gap: var(--space-8); min-width: 0; }
+.folder-title > .ico { flex: none; width: 20px; height: 20px; color: var(--muted); }
+.folder-title h1 { margin: 0; min-width: 0; font-size: 20px; line-height: 28px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.folder-rename { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-8); max-width: 520px; }
+.folder-rename .ipt { flex: 1; min-width: 200px; }
+.folder-rename .acts { display: flex; gap: var(--space-8); }
+.move-list { list-style: none; margin: 0 0 var(--space-8); padding: 0; max-height: 50vh; overflow: auto; }
+.move-to {
+  display: flex; align-items: center; gap: var(--space-8); width: 100%; padding: 8px 10px; border: 0; border-radius: 10px;
+  background: none; color: var(--text); font: inherit; font-weight: 550; text-align: left;
+}
+.move-to:hover:not(:disabled), .move-to:focus-visible { background: var(--fill); }
+.move-to:disabled { color: var(--muted); }
+.move-to .ico { flex: none; width: 16px; height: 16px; color: var(--muted); }
+.move-to span:first-of-type { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.move-here { flex: none; color: var(--muted); font-size: var(--fs-label); font-weight: 500; }
+.move-new { display: flex; flex-wrap: wrap; gap: var(--space-8); margin-top: var(--space-8); }
+.move-new .ipt { flex: 1; min-width: 160px; }
+.move-new .acts { display: flex; gap: var(--space-8); }
+
 @media (max-width: 640px) {
   .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-12); }
   .pc .face .said { padding: 40px 12px 0; font-size: 13px; }

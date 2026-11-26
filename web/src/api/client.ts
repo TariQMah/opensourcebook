@@ -63,6 +63,7 @@ import type {
   VoiceOption,
   SetupState,
   UploadType,
+  ProjectGroup,
 } from "./types";
 
 type Query = Record<string, string | number | undefined>;
@@ -220,6 +221,25 @@ export class ApiClient {
   async setLibrary(folder: string | null): Promise<Library> {
     return (await this.request<{ library: Library }>("PUT", "/v1/library", { json: { folder } })).library;
   }
+  // Folders on Home
+  async listGroups(): Promise<ProjectGroup[]> {
+    return (await this.request<{ groups: ProjectGroup[] }>("GET", "/v1/groups")).groups;
+  }
+  async createGroup(title: string): Promise<ProjectGroup> {
+    return (await this.request<{ group: ProjectGroup }>("POST", "/v1/groups", { json: { title } })).group;
+  }
+  async renameGroup(id: string, title: string): Promise<ProjectGroup> {
+    return (await this.request<{ group: ProjectGroup }>("PATCH", `/v1/groups/${enc(id)}`, { json: { title } })).group;
+  }
+  /** Deletes the folder; its projects go back on Home, none is deleted. */
+  deleteGroup(id: string): Promise<{ groupId: string; moved: number }> {
+    return this.request("DELETE", `/v1/groups/${enc(id)}`);
+  }
+  /** Moves a project into a folder on Home, or back on Home with `null`. */
+  async moveProject(id: string, groupId: string | null): Promise<Project> {
+    return (await this.request<{ project: Project }>("PATCH", `/v1/projects/${enc(id)}`, { json: { groupId } })).project;
+  }
+
   /** Deletes a project for good, with everything in it; `409 project_busy` while a plan in it runs. */
   deleteProject(id: string): Promise<ProjectDeleted> {
     return this.request("DELETE", `/v1/projects/${enc(id)}`);

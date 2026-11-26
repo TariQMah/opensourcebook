@@ -1,6 +1,6 @@
 import { useEffect, useState, useSyncExternalStore, type FormEvent } from "react";
 import { Link, useLocation, useSearchParams } from "react-router";
-import type { OutputSummary, PlanView, Project } from "../api/types";
+import type { OutputSummary, PlanView, Project, ProjectGroup } from "../api/types";
 import { useApi, useFormats } from "../app/context";
 import { ErrorNotice, LoadState } from "../app/Status";
 import { useLoad } from "../app/useLoad";
@@ -9,6 +9,7 @@ import { Icon } from "../design/Icon";
 import { Empty } from "../design/ui";
 import { RowMenu } from "../design/RowMenu";
 import { DeleteProject } from "./DeleteProject";
+import { FolderCard, FolderHead, MoveToFolder, NewFolderTile } from "./HomeFolders";
 import { NewProjectDialog } from "./NewProjectDialog";
 import { ExampleCard, ProjectCardFace, ProjectCardFooter } from "./StartHere";
 import { EXAMPLES } from "./examples";
@@ -28,12 +29,14 @@ interface ProjectSummary {
  * The projects grid and nothing above it. Every project card is alike: a
  * picture (with a tag for Example, or the making line with its Stop), its name,
  * and a fixed footer showing source and made counts. Everything lives in a project
- * (docs/DECISIONS.md #46).
+ * (docs/DECISIONS.md #46). Projects can be kept in folders: Home shows the folders first, then the projects in none;
+ * `?folder=<id>` shows one folder's projects, and search looks inside it. Searching on Home looks everywhere.
  */
 export function Home() {
   const client = useApi();
   const [params, setParams] = useSearchParams();
   const search = (params.get("q") ?? "").trim();
+  const folderId = params.get("folder");
   const [creating, setCreating] = useState(() => params.has("new"));
 
   const summaries = useLoad(async (): Promise<ProjectSummary[]> => {
@@ -77,11 +80,23 @@ export function Home() {
   }, [hasRunning, reloadSummaries]);
 
   const archived = useLoad(() => client.all((q) => client.listProjects({ ...q, archived: "only" })), [client]);
+  // An engine from before folders has none; Home is then one flat list as before.
+  const groups = useLoad(() => client.listGroups().catch((): ProjectGroup[] => []), [client]);
   const example = useLoad(() => (EXAMPLES[0] ? EXAMPLES[0].load() : Promise.resolve(undefined)), []);
 
   const list = summaries.data ?? [];
-  const firstTime = summaries.data !== undefined && list.length === 0 && archived.data !== undefined && archived.data.length === 0;
-  const visible = search ? list.filter((s) => s.project.title.toLowerCase().includes(search.toLowerCase())) : list;
+  const folders = groups.data ?? [];
+  const known = new Set(folders.map((g) => g.id));
+  const folderOf = (p: Project) => (p.groupId && known.has(p.groupId) ? p.groupId : undefined);
+  const folder = folderId ? folders.find((g) => g.id === folderId) : undefined;
+  const folderGone = Boolean(folderId) && groups.data !== undefined && !folder;
+  const firstTime = !folderId && summaries.data !== undefined && list.length === 0 && archived.data !== undefined && archived.data.length === 0 && folders.length === 0;
+  const matches = (title: string) => title.toLowerCase().includes(search.toLowerCase());
+  // In a folder: its projects. On Home: the projects in no folder, or, while searching, every project that matches.
+  const inView = folder ? list.filter((s) => folderOf(s.project) === folder.id) : search ? list : list.filter((s) => !folderOf(s.project));
+  const visible = search ? inView.filter((s) => matches(s.project.title)) : inView;
+  const shownFolders = folderId ? [] : search ? folders.filter((g) => matches(g.title)) : folders;
+  const countIn = (id: string) => list.filter((s) => folderOf(s.project) === id).length;
   const exampleMatches = firstTime && Boolean(EXAMPLES[0]) && (!search || Boolean(example.data?.project.title.toLowerCase().includes(search.toLowerCase())));
   // What the last delete took, said once under the list (the list itself may be gone with it).
   const arrived = useLocation().state as { said?: string } | null;
@@ -105,13 +120,28 @@ export function Home() {
   function reloadAll() {
     void summaries.reload();
     void archived.reload();
+    void groups.reload();
+  }
+
+  function leaveFolder(said: string) {
+    const nextParams = new URLSearchParams(params);
+    nextParams.delete("folder");
+    setParams(nextParams, { replace: true });
+    setGone(said);
+    reloadAll();
   }
 
   return (
     <>
-      <h1 className="sr-only">Projects</h1>
+      {folder ? <FolderHead group={folder} count={countIn(folder.id)} onChange={reloadAll} onDeleted={leaveFolder} /> : <h1 className="sr-only">Projects</h1>}
       <LoadState loading={summaries.loading && !summaries.data} error={summaries.error} what="projects" onRetry={() => void summaries.reload()} />
-      {search && summaries.data && visible.length === 0 && !exampleMatches ? (
+      {folderGone ? (
+        <Empty title="This folder is no longer here">
+          Its projects are on <Link to="/">Home</Link>.
+        </Empty>
+      ) : folder && summaries.data && visible.length === 0 && !search ? (
+        <Empty title="Nothing in this folder yet">Move a project here from its menu (⋯), with Move to folder.</Empty>
+      ) : search && summaries.data && visible.length === 0 && shownFolders.length === 0 && !exampleMatches ? (
         <Empty title={`Nothing matches “${search}”`}>
           Try fewer words, or{" "}
           <button className="link" type="button" onClick={clearSearch}>
@@ -122,20 +152,24 @@ export function Home() {
       ) : (
         summaries.data && (
           <div className="grid">
-            {!search && (
+            {!search && !folder && (
               <button type="button" className="pc-new" onClick={() => setCreating(true)}>
                 <Icon name="plus" />
                 <span>New project</span>
               </button>
             )}
+            {!search && !folder && list.length > 0 && <NewFolderTile onMade={() => void groups.reload()} />}
             {firstTime && <ExampleCard {...(example.data ? { bundle: example.data } : {})} filter={search} />}
+            {shownFolders.map((group) => (
+              <FolderCard key={group.id} group={group} count={countIn(group.id)} />
+            ))}
             {visible.map((summary) => (
-              <ProjectCard key={summary.project.id} summary={summary} onChange={reloadAll} onDeleted={setGone} />
+              <ProjectCard key={summary.project.id} summary={summary} folders={folders} onChange={reloadAll} onDeleted={setGone} />
             ))}
           </div>
         )
       )}
-      {!search && archived.data && archived.data.length > 0 && (
+      {!search && !folderId && archived.data && archived.data.length > 0 && (
         <Archived projects={archived.data} onChange={reloadAll} onDeleted={setGone} />
       )}
       {gone && (
@@ -149,12 +183,13 @@ export function Home() {
 }
 
 /** A project card: picture with tags, name, and fixed counts footer; its menu renames, archives or deletes it. */
-function ProjectCard({ summary, onChange, onDeleted }: { summary: ProjectSummary; onChange: () => void; onDeleted: (said: string | undefined) => void }) {
+function ProjectCard({ summary, folders, onChange, onDeleted }: { summary: ProjectSummary; folders: ProjectGroup[]; onChange: () => void; onDeleted: (said: string | undefined) => void }) {
   const client = useApi();
   const formats = useFormats();
   const { project, newest, sourceCount, madeCount, plans } = summary;
   const [renaming, setRenaming] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [moving, setMoving] = useState(false);
   const [title, setTitle] = useState(project.title);
   const [error, setError] = useState<unknown>();
 
@@ -224,11 +259,23 @@ function ProjectCard({ summary, onChange, onDeleted }: { summary: ProjectSummary
         name={project.title}
         items={[
           { label: "Rename", run: () => setRenaming(true) },
+          { label: "Move to folder…", run: () => setMoving(true) },
           { label: "Archive", note: "keeps everything", run: () => void act(() => client.archiveProject(project.id)) },
           { label: "Delete…", danger: true, run: () => (onDeleted(undefined), setDeleting(true)) },
         ]}
       />
       <ErrorNotice error={error} />
+      {moving && (
+        <MoveToFolder
+          project={project}
+          groups={folders}
+          onCancel={() => setMoving(false)}
+          onMoved={() => {
+            setMoving(false);
+            onChange();
+          }}
+        />
+      )}
       {deleting && (
         <DeleteProject
           project={project}
