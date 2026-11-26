@@ -37,13 +37,13 @@
  */
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
-import { join } from "node:path";
-import { plainEnv, programReads, tempEnv, toolReads, type BoxSpec } from "../box.ts";
+import { dirname, join } from "node:path";
+import { plainEnv, programReads, tempEnv, toolReads, within, type BoxSpec } from "../box.ts";
 import { epochToIso, heardLimit } from "./limit.ts";
 import { marks } from "./marks.ts";
 import { agentEnv, allLines, firstLine, Remembered, run, saidOf, stop } from "./process.ts";
 import type { AgentAdapter, AgentInfo, Problem, RunningTurn, TurnEnd, TurnSpec } from "./types.ts";
-import type { Box } from "../box.ts";
+import type { Box, Reach } from "../box.ts";
 
 export interface ClaudeOptions {
   bin?: string;
@@ -65,6 +65,26 @@ export const FILE_TOOLS = ["Read", "Write", "Edit", "MultiEdit", "Glob", "Grep",
 /** The settings of a files-only turn: its file tools refuse any path outside the folder, besides `--restricted`. */
 export const FILES_SETTINGS = { permissions: { blockReadsOutsideWorkingDirectories: true, blockWritesOutsideWorkingDirectories: true } };
 
+/** A path in a permission rule: an absolute one starts with `//`. */
+const rulePath = (path: string) => `/${path}`;
+
+/**
+ * Its own rules for what a turn may read beside its folder (`TurnSpec.workspace.reach`), as far as they can say it.
+ * They open folders only, never a single file, and they follow a link to where it leads, so each file's folder is
+ * added too (a job folder's own for its `README.md`, the person's for a source's original): `--add-dir` for those
+ * folders, and every edit in what is opened refused (`deny` wins over every allow) except in a folder that holds the
+ * workspace. They are the looser wall: such a turn runs only inside the box, which opens exactly those files and
+ * folders and no more, and keeps every write in the workspace (`FilesOnly.reads`).
+ */
+export function claudeReach(reach: Reach | undefined, base: { permissions: Record<string, unknown> } = { permissions: {} }): { dirs: string[]; settings: { permissions: Record<string, unknown> } } {
+  const read = [...(reach?.folders ?? []), ...(reach?.files ?? [])];
+  if (!reach || !read.length) return { dirs: [], settings: base };
+  const dirs = [...new Set([...reach.folders, ...reach.files.map((f) => dirname(f))])];
+  const holdsWork = (dir: string) => reach.write.some((w) => within(w, dir));
+  const denied = [...reach.folders.map((d) => `${rulePath(d)}/**`), ...reach.files.map(rulePath), ...dirs.filter((d) => !holdsWork(d) && !reach.folders.includes(d)).map((d) => `${rulePath(d)}/**`)];
+  return { dirs, settings: { permissions: { ...base.permissions, deny: [...new Set(denied)].map((p) => `Edit(${p})`) } } };
+}
+
 const ANTHROPIC = "https://api.anthropic.com";
 
 /** The model calls Claude Code makes, the only ones forwarded for it. */
@@ -85,7 +105,8 @@ export function claudeAdapter(options: ClaudeOptions = {}): AgentAdapter {
     mark: marks.claude,
     maker: "anthropic",
     replacesWorkPrompt: true,
-    filesOnly: { note: CLAUDE_FILES },
+    // With its file tools only it runs inside the box where there is one, which opens what is beside its folder exactly.
+    filesOnly: { note: CLAUDE_FILES, reads: true },
     boxing: {
       note: CLAUDE_FULL,
       unready: () => (options.apiKey ? undefined : NO_CLAUDE_KEY),
@@ -238,6 +259,7 @@ export function boxed(bin: string, args: string[], spec: TurnSpec, env: NodeJS.P
 export function claudeArgs(spec: TurnSpec, promptFile?: string): string[] {
   const mcp = { mcpServers: { [spec.mcp.name]: { type: "http", url: spec.mcp.url, headers: spec.mcp.headers } } };
   const access = spec.workspace?.access;
+  const reach = spec.workspace?.reach;
   return [
     "-p",
     "--output-format",
@@ -245,7 +267,9 @@ export function claudeArgs(spec: TurnSpec, promptFile?: string): string[] {
     "--verbose",
     // Its own tools: all of them in a full workspace (inside the box), its file tools confined to the folder in a
     // files-only one, none otherwise.
-    ...(access === "full" ? [] : access === "files" ? ["--restricted", "--tools", FILE_TOOLS.join(","), "--settings", JSON.stringify(FILES_SETTINGS)] : ["--tools", ""]),
+    ...(access === "full" ? (reach ? ["--settings", JSON.stringify(claudeReach(reach).settings)] : []) : access === "files" ? ["--restricted", "--tools", FILE_TOOLS.join(","), "--settings", JSON.stringify(claudeReach(reach, FILES_SETTINGS).settings)] : ["--tools", ""]),
+    // The folders of what it may read beside its own (`claudeReach`, which keeps them read only).
+    ...(access && reach ? claudeReach(reach).dirs.flatMap((dir) => ["--add-dir", dir]) : []),
     "--strict-mcp-config",
     "--mcp-config",
     JSON.stringify(mcp),

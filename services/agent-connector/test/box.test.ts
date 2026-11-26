@@ -1,12 +1,12 @@
 /** The box's walls as written for macOS's sandbox, and the checks on what goes in them, without running sandbox-exec. */
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
-import { boxConfigDir, boxed, CLAUDE_FILES, claudeAdapter, claudeArgs, claudeFilesBoxSpec, claudeTempEnv, FILE_TOOLS, NO_CLAUDE_KEY, WORKSPACE_TOOLS } from "../src/agents/claude.ts";
+import { boxConfigDir, boxed, CLAUDE_FILES, claudeAdapter, claudeArgs, claudeFilesBoxSpec, claudeReach, claudeTempEnv, FILE_TOOLS, NO_CLAUDE_KEY, WORKSPACE_TOOLS } from "../src/agents/claude.ts";
 import { fakeCli } from "./fake-cli.ts";
-import { ancestors, boxForPlatform, checkWorkspace, installOf, judgeWorkspace, realPath, seatbeltProfile, tempEnv, toolReads, SANDBOX_EXEC, type ToolFs } from "../src/box.ts";
+import { ancestors, boxForPlatform, checkWorkspace, installOf, judgeWorkspace, linkable, reachOf, readsOf, realPath, seatbeltProfile, tempEnv, toolReads, withReach, SANDBOX_EXEC, type Box, type BoxSpec, type ToolFs } from "../src/box.ts";
 
 /** The box is macOS's sandbox, and a profile names POSIX paths: these read one, which Windows writes with its own. */
 const seatbelt = { skip: process.platform === "win32" && "the box is macOS's sandbox; its profile names POSIX paths" };
@@ -327,4 +327,75 @@ test("a files-only turn runs on its own login: no connector address, no secret, 
     for (const [k, v] of Object.entries(saved)) if (v !== undefined) process.env[k] = v;
     cli.remove();
   }
+});
+
+test("what a workspace may read beside it: what was named in the folder around it, and the exact file each link there leads to", () => {
+  const home = realpathSync(mkdtempSync(join(tmpdir(), "opensourcebook-reach-")));
+  const jobs = join(home, "app", "jobs");
+  const job = join(jobs, "v1");
+  const work = join(job, "work");
+  const docs = join(home, "Documents", "course");
+  for (const dir of [work, join(job, "sources"), join(job, "extracted", "s1"), docs, join(home, ".ssh"), join(home, "Library", "Keychains")]) mkdirSync(dir, { recursive: true });
+  writeFileSync(join(job, "README.md"), "note");
+  writeFileSync(join(docs, "chapter.pdf"), "pdf");
+  writeFileSync(join(home, ".ssh", "id_fake"), "not a key");
+  writeFileSync(join(home, "Library", "Keychains", "login.keychain-db"), "not a keychain");
+  symlinkSync(join(docs, "chapter.pdf"), join(job, "sources", "s1-chapter.pdf"));
+  symlinkSync(docs, join(job, "sources", "s2-folder"));
+  symlinkSync(join(home, ".ssh", "id_fake"), join(job, "sources", "s3-key"));
+  symlinkSync(join(home, "Library", "Keychains", "login.keychain-db"), join(job, "sources", "s4-keychain"));
+  symlinkSync(join(home, "gone.pdf"), join(job, "sources", "s5-gone.pdf"));
+  try {
+    const named = [join(job, "README.md"), join(job, "sources"), join(job, "extracted"), join(job, "pictures")];
+    const found = reachOf(work, named, home, tmpdir(), [jobs]);
+    assert.ok("reach" in found);
+    assert.deepEqual(found.reach.write, [work]);
+    assert.deepEqual(found.reach.folders, [join(job, "sources"), join(job, "extracted")]);
+    assert.deepEqual(found.reach.files, [join(job, "README.md"), join(docs, "chapter.pdf")], "the original only: no folder a link leads to, no key, no keychain, nothing missing");
+    assert.deepEqual(found.missing, [join(job, "pictures")]);
+    assert.deepEqual(readsOf(found.reach), [...found.reach.folders, ...found.reach.files]);
+    assert.ok("problem" in reachOf(work, [docs], home, tmpdir(), [jobs]), "nothing outside the folder around the workspace");
+    assert.ok("problem" in reachOf(work, [job], home, tmpdir(), [jobs]), "not the folder around it as a whole");
+    assert.ok("problem" in reachOf(work, ["sources"], home, tmpdir(), [jobs]), "absolute paths only");
+    assert.ok("problem" in reachOf(join(home, "a"), [join(home, "README.md")], home, tmpdir()), "never beside a workspace whose folder is the home folder");
+    const inside = reachOf(work, [join(work, "skills")], home, tmpdir(), [jobs]);
+    assert.ok("reach" in inside && !inside.reach.folders.length && !inside.missing.length, "the workspace itself is already open");
+  } finally {
+    rmSync(home, { recursive: true, force: true });
+  }
+});
+
+test("a linked file is opened unless it is where programs keep settings, logins or keys", () => {
+  assert.equal(linkable("/Users/ann/Documents/a.pdf", "/Users/ann"), true);
+  assert.equal(linkable("/Users/ann/Library/Mobile Documents/com~apple~CloudDocs/a.pdf", "/Users/ann"), true, "iCloud Drive");
+  assert.equal(linkable("/Volumes/USB/a.pdf", "/Users/ann"), true);
+  assert.equal(linkable("/Users/ann/.ssh/id_ed25519", "/Users/ann"), false);
+  assert.equal(linkable("/Users/ann/.claude.json", "/Users/ann"), false, "a dot file at the top of the home folder");
+  assert.equal(linkable("/Users/ann/Library/Keychains/login.keychain-db", "/Users/ann"), false);
+  assert.equal(linkable("/Users/ann/code/app/.codex/auth.json", "/Users/ann"), false);
+});
+
+test("the box opens a reach's reads for every agent, on top of what its adapter opens", () => {
+  const seen: BoxSpec[] = [];
+  const box: Box = { kind: "seatbelt", wrap: (bin, args, s) => (seen.push(s), { bin, args }) };
+  const reach = { write: ["/w/job/work"], folders: ["/w/job/extracted"], files: ["/w/job/README.md", "/Users/ann/Documents/a.pdf"] };
+  withReach(box, reach).wrap("agent", [], { ...spec, read: ["/opt/agent"] });
+  assert.deepEqual(seen[0]!.read, ["/opt/agent", "/w/job/extracted", "/w/job/README.md", "/Users/ann/Documents/a.pdf"]);
+  assert.equal(withReach(box, undefined), box);
+  assert.match(seatbeltProfile({ ...spec, read: readsOf(reach) }), /\(allow file-read\* [^\n]*\(subpath "\/Users\/ann\/Documents\/a\.pdf"\)/);
+});
+
+test("Claude Code beside its folder: the folders of what it may read added, every edit there refused, its folder still its own", () => {
+  const box = boxForPlatform("darwin", () => true)!;
+  const reach = { write: ["/j/v1/work"], folders: ["/j/v1/sources", "/j/v1/extracted"], files: ["/j/v1/README.md", "/Users/ann/Documents/a.pdf"] };
+  for (const access of ["files", "full"] as const) {
+    const args = claudeArgs({ turnId: "t", systemPrompt: "s", prompt: "p", cwd: "/j/v1/work", mcp: { name: "opensourcebook", url: "u", headers: {} }, workspace: { access, box, connectorPort: 8650, reach, ...(access === "full" ? { model: { baseUrl: "b", secret: "s" } } : {}) } });
+    const dirs = args.flatMap((a, i) => (a === "--add-dir" ? [args[i + 1]] : []));
+    assert.deepEqual(dirs, ["/j/v1/sources", "/j/v1/extracted", "/j/v1", "/Users/ann/Documents"], access);
+    const settings = JSON.parse(args[args.indexOf("--settings") + 1]!);
+    assert.deepEqual(settings.permissions.deny, ["Edit(//j/v1/sources/**)", "Edit(//j/v1/extracted/**)", "Edit(//j/v1/README.md)", "Edit(//Users/ann/Documents/a.pdf)", "Edit(//Users/ann/Documents/**)"], `${access}: the job folder itself holds the work folder, so only the box keeps writes out of it`);
+    if (access === "files") assert.equal(settings.permissions.blockWritesOutsideWorkingDirectories, true);
+  }
+  assert.deepEqual(claudeReach(undefined), { dirs: [], settings: { permissions: {} } });
+  assert.equal(claudeAdapter().filesOnly?.reads, true, "with its file tools only it runs in the box, which holds the reads exactly");
 });

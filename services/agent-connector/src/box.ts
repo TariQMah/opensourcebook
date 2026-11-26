@@ -3,7 +3,8 @@
  * rest of the computer. The agent runs inside macOS's sandbox (Seatbelt, through `sandbox-exec`), which every process it
  * starts inherits, so a shell command, a script or a downloaded tool is held by the same walls as the agent:
  *
- * - It reads and writes freely in the work's own folder.
+ * - It reads and writes freely in the work's own folder, and reads, without changing, what the caller named beside it
+ *   (`reachOf`: a video's note, sources and what was read from them, and the exact files its links lead to).
  * - Nothing else in the person's home folder can be read or written (Desktop, Documents, other projects, keys, mail,
  *   other apps' data), nor other drives or shared folders. Only what the agent needs to run is opened: the folders its
  *   own program and the tools on its PATH live in (read only), and a settings folder of its own that is not the person's.
@@ -308,4 +309,134 @@ export const PLAIN_ENV = ["PATH", "HOME", "USER", "LOGNAME", "SHELL", "LANG", "L
 
 export function plainEnv(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
   return Object.fromEntries(PLAIN_ENV.filter((k) => env[k] !== undefined).map((k) => [k, env[k]]));
+}
+
+/**
+ * What an agent may reach in files for one piece of work, by real paths, on any computer: it reads and writes in
+ * `write` (its workspace) and only reads `folders` and `files`, nothing else of the person's. On a Mac the box holds
+ * it (`withReach`), and the agent's own rules too where they can say it; on Linux and Windows there is no box yet, and
+ * a sandbox there is meant to take this same list.
+ */
+export interface Reach {
+  write: string[];
+  /** Folders beside the workspace opened read only, as the caller named them (a job folder's `sources/`, `extracted/`). */
+  folders: string[];
+  /**
+   * Files opened read only: the ones the caller named beside the workspace (a job folder's `README.md`), and the exact
+   * file each link in the named folders leads to (a source's original, wherever the person keeps it), never the folder
+   * that holds it.
+   */
+  files: string[];
+}
+
+/** Everything a reach opens read only. */
+export const readsOf = (reach: Reach | undefined): string[] => (reach ? [...reach.folders, ...reach.files] : []);
+
+/** How many links in the named folders are followed, at most. */
+export const MAX_LINKED = 500;
+
+/**
+ * The reach of a workspace with `named` opened beside it, read only, or why not. Each named path must be inside the
+ * folder that holds the workspace (a video's job folder around its `work/`), and that folder must itself be one a
+ * workspace could be (`judgeWorkspace`, with the same `roots`), so nothing outside the caller's own folders is named.
+ * A named path that does not exist is left out (`missing`). A link among them, or in a named folder at any depth,
+ * opens the one file it leads to when that is a file and not in a place programs keep their settings or keys
+ * (`linkable`); a link to a folder opens nothing.
+ */
+export function reachOf(workspace: string, named: readonly unknown[], home: string = homedir(), temp: string = tmpdir(), roots: readonly string[] = []): { reach: Reach; missing: string[] } | { problem: string } {
+  const work = realPath(workspace);
+  const around = dirname(work);
+  const realHome = realPath(home);
+  const judged = judgeWorkspace(around, realHome, [realPath(temp), "/private/tmp"], roots.map(realPath));
+  if ("problem" in judged || around === work) return { problem: "workspace.read can only name what is in the folder that holds the workspace, and that folder must be one of the caller's own." };
+  const reach: Reach = { write: [work], folders: [], files: [] };
+  const missing: string[] = [];
+  const linked = new Set<string>();
+  const follow = (link: string) => {
+    const target = linkTarget(link);
+    if (target && !within(target, around) && linked.size < MAX_LINKED && linkable(target, realHome)) linked.add(target);
+  };
+  for (const entry of named) {
+    if (typeof entry !== "string" || !isAbsolute(entry)) return { problem: "workspace.read must be a list of absolute paths." };
+    // The folders on the way by their real paths; the last part as it is, so a link there is seen as a link.
+    const path = join(realPath(dirname(entry)), basename(entry));
+    if (!within(path, around) || path === around) return { problem: "workspace.read can only name what is in the folder that holds the workspace." };
+    if (within(path, work)) continue;
+    let stat;
+    try {
+      stat = lstatSync(path);
+    } catch {
+      missing.push(entry);
+      continue;
+    }
+    if (stat.isSymbolicLink()) follow(path);
+    else if (stat.isDirectory()) {
+      reach.folders.push(path);
+      for (const link of linksIn(path)) follow(link);
+    } else if (stat.isFile()) reach.files.push(path);
+  }
+  reach.files.push(...linked);
+  reach.folders = dropNested([...new Set(reach.folders)]);
+  reach.files = [...new Set(reach.files)].filter((f) => !reach.folders.some((d) => within(f, d)));
+  return { reach, missing };
+}
+
+/** Where a link leads, by its real path, when that is a file; undefined for a link to a folder or to nothing. */
+function linkTarget(link: string): string | undefined {
+  try {
+    const target = realpathSync(link);
+    return statSync(target).isFile() ? target : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/** The links in `dir` at any depth (at most `max` entries looked at), not followed into. */
+export function linksIn(dir: string, max = 20_000): string[] {
+  const found: string[] = [];
+  const queue = [dir];
+  let seen = 0;
+  while (queue.length && seen < max) {
+    const here = queue.shift()!;
+    let names: string[];
+    try {
+      names = readdirSync(here);
+    } catch {
+      continue;
+    }
+    for (const name of names) {
+      if (++seen > max) break;
+      const path = join(here, name);
+      try {
+        const stat = lstatSync(path);
+        if (stat.isSymbolicLink()) found.push(path);
+        else if (stat.isDirectory()) queue.push(path);
+      } catch {
+        // gone meanwhile
+      }
+    }
+  }
+  return found;
+}
+
+/**
+ * Whether a file a link leads to may be opened read only: not the home folder's keychains, not in a dot folder at the
+ * top of the home folder (where tools keep settings and logins), and not in any agent's, tool's or login's own folder
+ * at any depth (`SETTINGS`).
+ */
+export function linkable(target: string, home: string): boolean {
+  if (SETTINGS.test(target)) return false;
+  if (!within(target, home)) return true;
+  const first = relative(home, target).split(sep)[0]!;
+  return !first.startsWith(".") && !within(target, join(home, "Library", "Keychains"));
+}
+
+/**
+ * The box with a reach's read-only paths opened in it for every agent alike, whatever else its adapter opens: the one
+ * place they are added, so each adapter's own box rules stay as they are.
+ */
+export function withReach(box: Box, reach: Reach | undefined): Box {
+  const extra = readsOf(reach);
+  if (!extra.length) return box;
+  return { kind: box.kind, wrap: (bin, args, spec) => box.wrap(bin, args, { ...spec, read: [...spec.read, ...extra] }) };
 }

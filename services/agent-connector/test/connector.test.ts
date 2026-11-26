@@ -6,7 +6,7 @@
  * time-out end a turn as such.
  */
 import assert from "node:assert/strict";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, statSync, symlinkSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createServer, type Server } from "node:http";
@@ -1010,5 +1010,56 @@ test("appends one JSONL line per turn to usageLog with separate cache tokens, re
     server.close();
     engine.server.close();
     rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("a work folder's turn may read what the caller named beside it, read only and only inside the box; outside the folder around it is refused", async () => {
+  const jobs = realpathSync(mkdtempSync(join(tmpdir(), "opensourcebook-jobs-")));
+  const job = join(jobs, "v1");
+  const work = join(job, "work");
+  mkdirSync(work, { recursive: true });
+  mkdirSync(join(job, "extracted"));
+  writeFileSync(join(job, "README.md"), "note");
+  const read = [join(job, "README.md"), join(job, "extracted")];
+  const opened: string[][] = [];
+  const box: Box = { kind: "seatbelt", wrap: (bin, args, s) => (opened.push(s.read), { bin, args }) };
+  const status = async (t: Awaited<ReturnType<typeof setup>>) => (await (await fetch(`${t.url}/status`, { headers: { authorization: `Bearer ${TOKEN}` } })).json()).agents[0];
+  const agent = (reads?: boolean) => ({ ...fakeAgent(async () => ({ ok: true })), filesOnly: { note: "its file tools only", ...(reads ? { reads } : {}) } });
+  const boxed = agent(true);
+  const t = await setup(boxed, undefined, undefined, box);
+  try {
+    assert.equal((await status(t)).workspaceReads, true);
+    assert.deepEqual(await (await t.post("/turns", { ...t.turn("r1"), workspace: { path: work, read } })).json(), { ok: true, agent: "fake", model: "small", workspace: true, access: "files", read: true });
+    await t.engine.finish;
+    const spec = boxed.specs[0]!;
+    assert.deepEqual(spec.workspace?.reach, { write: [work], folders: [join(job, "extracted")], files: [join(job, "README.md")] });
+    spec.workspace!.box!.wrap("agent", [], { workspace: work, home: "/h", read: ["/opt/agent"], write: [], connectorPort: 1 });
+    assert.deepEqual(opened[0], ["/opt/agent", join(job, "extracted"), join(job, "README.md")], "the box the adapter gets opens them for it");
+    const refused = await t.post("/turns", { ...t.turn("r2"), workspace: { path: work, read: [jobs] } });
+    assert.equal(refused.status, 400);
+    assert.match((await refused.json()).message, /folder that holds the workspace/);
+  } finally {
+    t.close();
+  }
+  const noBox = agent(true);
+  const u = await setup(noBox);
+  try {
+    assert.equal((await status(u)).workspaceReads, undefined);
+    assert.deepEqual(await (await u.post("/turns", { ...u.turn("r3"), workspace: { path: work, read } })).json(), { ok: true, agent: "fake", model: "small", workspace: true, access: "files" }, "no box: its folder alone");
+    await u.engine.finish;
+    assert.equal(noBox.specs[0]!.workspace?.reach, undefined);
+  } finally {
+    u.close();
+  }
+  const ownRules = agent();
+  const v = await setup(ownRules, undefined, undefined, box);
+  try {
+    assert.equal((await status(v)).workspaceReads, undefined);
+    assert.equal((await (await v.post("/turns", { ...v.turn("r4"), workspace: { path: work, read } })).json()).read, undefined, "an agent outside the box: its folder alone");
+    await v.engine.finish;
+    assert.equal(ownRules.specs[0]!.workspace?.reach, undefined);
+  } finally {
+    v.close();
+    rmSync(jobs, { recursive: true, force: true });
   }
 });

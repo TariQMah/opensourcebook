@@ -1,8 +1,8 @@
 /**
  * The connector's HTTP server, on this computer only (127.0.0.1).
  *
- *   GET  /status[?fresh=1]     → 200 { agent?, model?, effort?, agents: [{ id, label, installed, version?, signedIn?, apiKey?, note?, unavailable?, mark?, models?, makers?, defaultModels?, defaultEfforts?, efforts?, signIn?, install?, workspace, workspaceAccess?, workspaceNote?, workspaceUnavailable?, limit? }] }
- *   POST /turns               → 202 { ok, agent, model?, effort?, workspace, access? }   start a turn (the engine, the scenes service)
+ *   GET  /status[?fresh=1]     → 200 { agent?, model?, effort?, agents: [{ id, label, installed, version?, signedIn?, apiKey?, note?, unavailable?, mark?, models?, makers?, defaultModels?, defaultEfforts?, efforts?, signIn?, install?, workspace, workspaceAccess?, workspaceNote?, workspaceUnavailable?, workspaceReads?, limit? }] }
+ *   POST /turns               → 202 { ok, agent, model?, effort?, workspace, access?, read? }   start a turn (the engine, the scenes service)
  *                               429 { problem: "agentLimit", message, limit }   not started: the agent's limit resets later
  *   GET  /turns/:id           → 200 { running }       whether that turn still runs here (the engine, to tell a dropped turn)
  *   POST /turns/:id/stop      → 200 { ok }            stop it (the engine)
@@ -137,7 +137,7 @@ export function createConnector(options: ConnectorOptions): { server: Server; tu
     }
     if (request.method === "POST" && url.pathname === "/turns") {
       const started = await turns.start(await readJson(request), scope);
-      if (started.ok) return send(response, 202, { ok: true, agent: started.agent, ...(started.model ? { model: started.model } : {}), ...(started.effort ? { effort: started.effort } : {}), workspace: started.workspace, ...(started.access ? { access: started.access } : {}) });
+      if (started.ok) return send(response, 202, { ok: true, agent: started.agent, ...(started.model ? { model: started.model } : {}), ...(started.effort ? { effort: started.effort } : {}), workspace: started.workspace, ...(started.access ? { access: started.access } : {}), ...(started.read ? { read: true } : {}) });
       return send(response, started.status, { problem: started.problem, message: started.message, ...(started.limit ? { limit: started.limit } : {}) });
     }
     const probe = /^\/agents\/([^/]+)\/probe$/.exec(url.pathname);
@@ -213,7 +213,7 @@ function send(response: ServerResponse, status: number, body?: unknown): void {
  * which (`files`: its file tools only, on its own login; `full`: its shell, files and web in the box, on an API key),
  * `workspaceNote` that in the adapter's words, and `workspaceUnavailable` why it doesn't get everything.
  */
-function workspaceOf(agent: AgentAdapter, box: Box | undefined, off?: boolean): { workspace: boolean; workspaceAccess?: string; workspaceNote?: string; workspaceUnavailable?: string } {
+function workspaceOf(agent: AgentAdapter, box: Box | undefined, off?: boolean): { workspace: boolean; workspaceAccess?: string; workspaceNote?: string; workspaceUnavailable?: string; workspaceReads?: boolean } {
   const offer = workspaceAccess(agent, box, off);
-  return { workspace: !!offer.access, ...(offer.access ? { workspaceAccess: offer.access } : {}), ...(offer.note ? { workspaceNote: offer.note } : {}), ...(offer.unavailable ? { workspaceUnavailable: offer.unavailable } : {}) };
+  return { workspace: !!offer.access, ...(offer.access ? { workspaceAccess: offer.access } : {}), ...(offer.note ? { workspaceNote: offer.note } : {}), ...(offer.unavailable ? { workspaceUnavailable: offer.unavailable } : {}), ...(offer.access && offer.reads ? { workspaceReads: true } : {}) };
 }

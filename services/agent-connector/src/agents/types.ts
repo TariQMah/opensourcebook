@@ -7,7 +7,7 @@
  * copies, stores, passes on or prints the CLI's login. The one credential
  * an adapter may hold is an API key the person gave the connector for it.
  */
-import type { Box } from "../box.ts";
+import type { Box, Reach } from "../box.ts";
 import type { Mark } from "./marks.ts";
 
 /** Why a turn did not end with a reply, in the engine's words. */
@@ -58,6 +58,13 @@ export interface TurnSpec {
     access: WorkspaceAccess;
     box?: Box;
     connectorPort: number;
+    /**
+     * What the agent may reach in files: the folder itself to write, and what the caller named beside it (a video's
+     * `README.md`, `sources/`, `extracted/`, and the exact files its links lead to) to read only (`reachOf` in
+     * `../box.ts`). Only with a box, which already opens exactly those reads; an adapter whose own rules wall the folder
+     * opens them there too, as far as its rules can (`FilesOnly.reads`).
+     */
+    reach?: Reach;
     /** With a box: the agent's own temporary folder for this turn (its TMPDIR), as the shared ones are shut in the box. */
     tmp?: string;
     /**
@@ -192,6 +199,13 @@ export interface AgentAdapter {
 export interface FilesOnly {
   /** What the agent gets there, in one plain sentence, for the person. */
   readonly note: string;
+  /**
+   * True when, with its file tools only, it runs inside the box where there is one, so what the caller named beside its
+   * folder (`TurnSpec.workspace.reach`) can be opened read only there: the box holds reads to exactly those paths and
+   * writes to the folder, and its own rules open them as far as they can. Left out, or with no box, it gets its folder
+   * alone: rules of an agent's own that open a path open it to writes too, or a whole folder for one file.
+   */
+  readonly reads?: boolean;
 }
 
 /**

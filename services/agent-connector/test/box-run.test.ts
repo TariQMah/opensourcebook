@@ -4,12 +4,12 @@
  */
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { createServer, type Server } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
-import { SANDBOX_EXEC, seatbeltProfile } from "../src/box.ts";
+import { reachOf, readsOf, SANDBOX_EXEC, seatbeltProfile } from "../src/box.ts";
 
 const listen = (server: Server, where: string | number) =>
   new Promise<void>((resolve) => (typeof where === "string" ? server.listen(where, resolve) : server.listen(where, "127.0.0.1", resolve)));
@@ -83,5 +83,43 @@ test("in the box: no socket or file of the shared temporary folders, its own tem
     connector.close();
     other.close();
     for (const path of [home, own, sock, sharedFile, userFile, `/private/tmp/${id}-w`, join(userTemp, `${id}-w`), `/private/var/tmp/${id}-w`]) rmSync(path, { recursive: true, force: true });
+  }
+});
+
+test("in the box: a job folder's note, what was read and a source's original are read only, nothing beside them is open, and writes stay in the work folder", { skip: process.platform !== "darwin" || !existsSync(SANDBOX_EXEC) }, async () => {
+  const userTemp = realpathSync(tmpdir());
+  const home = realpathSync(mkdtempSync(join(userTemp, "opensourcebook-home-")));
+  const job = join(home, "app", "jobs", "v1");
+  const work = join(job, "work");
+  const docs = join(home, "Documents");
+  for (const dir of [work, join(job, "sources"), join(job, "extracted", "s1"), docs]) mkdirSync(dir, { recursive: true });
+  writeFileSync(join(job, "README.md"), "note\n");
+  writeFileSync(join(job, "job.json"), "{}\n");
+  writeFileSync(join(job, "extracted", "s1", "text.md"), "text\n");
+  writeFileSync(join(docs, "chapter.txt"), "original\n");
+  writeFileSync(join(docs, "other.txt"), "not a source\n");
+  symlinkSync(join(docs, "chapter.txt"), join(job, "sources", "s1-chapter.txt"));
+  const own = realpathSync(mkdtempSync(join(userTemp, "opensourcebook-box-tmp-")));
+  try {
+    const found = reachOf(work, [join(job, "README.md"), join(job, "sources"), join(job, "extracted")], home, userTemp, [join(home, "app", "jobs")]);
+    assert.ok("reach" in found);
+    const profile = seatbeltProfile({ workspace: work, home, read: readsOf(found.reach), write: [], connectorPort: 1, tmp: own });
+    const run = (command: string) => inBox(profile, command, work, { PATH: "/usr/bin:/bin", HOME: home, TMPDIR: `${own}/` });
+    assert.equal(await run("cat ../README.md"), true, "the note");
+    assert.equal(await run("cat ../extracted/s1/text.md && ls ../extracted"), true, "what was read");
+    assert.equal(await run("cat ../sources/s1-chapter.txt"), true, "the source's original, through its link");
+    assert.equal(await run("cat ../sources/sources.json 2>/dev/null; ls ../sources"), true, "the sources folder");
+    assert.equal(await run(`cat ${join(docs, "other.txt")}`), false, "another file beside the original");
+    assert.equal(await run(`ls ${docs}`), false, "the original's folder");
+    assert.equal(await run("cat ../job.json"), false, "the service's own files");
+    assert.equal(await run("echo x > ../sources/s1-chapter.txt"), false, "writing the original through its link");
+    assert.equal(await run("echo x > ../README.md"), false, "writing the note");
+    assert.equal(await run("echo x > ../escape.txt"), false, "writing in the job folder");
+    assert.equal(await run("echo x > ../extracted/s1/new.md"), false, "writing in what was read");
+    assert.equal(await run("echo x > mine.txt && cat mine.txt"), true, "writing in the work folder");
+    assert.equal(readFileSync(join(docs, "chapter.txt"), "utf8"), "original\n");
+  } finally {
+    rmSync(home, { recursive: true, force: true });
+    rmSync(own, { recursive: true, force: true });
   }
 });

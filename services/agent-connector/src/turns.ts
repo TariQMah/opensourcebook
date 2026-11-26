@@ -14,10 +14,10 @@
 import { randomBytes } from "node:crypto";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import type { AgentRegistry } from "./agents/registry.ts";
 import type { AgentAdapter, LimitReset, Problem, RunningTurn, TurnEnd, Upstream, WorkspaceAccess } from "./agents/types.ts";
-import { boxTemp, checkWorkspace, realPath, within, type Box } from "./box.ts";
+import { boxTemp, checkWorkspace, reachOf, readsOf, realPath, within, withReach, type Box, type Reach } from "./box.ts";
 import { handleMcp, type ToolAnswer, type ToolImage, type ToolListing } from "./mcp.ts";
 import { MCP_SERVER } from "./names.ts";
 import { isLoopback, safeEqual } from "./net.ts";
@@ -112,7 +112,7 @@ export interface Scope {
   roots: string[];
 }
 
-export type StartResult = { ok: true; agent: string; model?: string; effort?: string; workspace: boolean; access?: WorkspaceAccess } | { ok: false; status: number; problem: Problem | "badRequest"; message: string; limit?: AgentLimit };
+export type StartResult = { ok: true; agent: string; model?: string; effort?: string; workspace: boolean; access?: WorkspaceAccess; read?: boolean } | { ok: false; status: number; problem: Problem | "badRequest"; message: string; limit?: AgentLimit };
 
 /** A usage limit an agent ran into: since when, and when it said it resets, if it said so. */
 export interface AgentLimit extends LimitReset {
@@ -132,12 +132,13 @@ const PROBE_PROMPT = "Reply with the single word ok.";
  * a box and the agent is ready for it (an API key), else its file tools only on its own login when its adapter can,
  * else nothing of its own. `note` says it in the adapter's words; `unavailable` says why it doesn't get everything.
  */
-export function workspaceAccess(agent: AgentAdapter, box: Box | undefined, off = false): { access?: WorkspaceAccess; note?: string; unavailable?: string } {
+export function workspaceAccess(agent: AgentAdapter, box: Box | undefined, off = false): { access?: WorkspaceAccess; note?: string; unavailable?: string; reads?: boolean } {
   if (off) return {};
   const unready = box && agent.boxing ? agent.boxing.unready() : undefined;
-  if (box && agent.boxing && !unready) return { access: "full", note: agent.boxing.note };
+  // What is named beside the folder is opened read only only where the box holds it (`FilesOnly.reads`).
+  if (box && agent.boxing && !unready) return { access: "full", note: agent.boxing.note, reads: true };
   const why = unready ? { unavailable: unready } : {};
-  return agent.filesOnly ? { access: "files", note: agent.filesOnly.note, ...why } : why;
+  return agent.filesOnly ? { access: "files", note: agent.filesOnly.note, ...why, ...(box && agent.filesOnly.reads ? { reads: true } : {}) } : why;
 }
 
 /** When the caller does not say how long a turn may run. */
@@ -238,11 +239,21 @@ export class Turns {
 
     // A workspace is given as the agent and this computer allow (`workspaceAccess`); otherwise its own tools stay off.
     let workspace: string | undefined;
+    let reach: Reach | undefined;
     const offer = read.workspace !== undefined ? workspaceAccess(agent, this.options.box, this.options.noWorkspaces) : {};
     if (offer.access) {
       const checked = checkWorkspace(read.workspace, this.options.home, undefined, [...(this.options.roots ?? []), ...(scope?.roots ?? [])]);
       if ("problem" in checked) return { ok: false, status: 400, problem: "badRequest", message: checked.problem };
       workspace = checked.path;
+      // What the caller named beside the folder, opened read only when this agent here can be held to reading it.
+      if (read.read?.length && offer.reads) {
+        const reached = reachOf(workspace, read.read, this.options.home, undefined, [...(this.options.roots ?? []), ...(scope?.roots ?? [])]);
+        if ("problem" in reached) return { ok: false, status: 400, problem: "badRequest", message: reached.problem };
+        const around = dirname(workspace);
+        if (scope && !scope.roots.map(realPath).some((root) => within(around, root) && around !== root)) return { ok: false, status: 403, problem: "badRequest", message: `workspace.read must be inside the ${scope.name} service's own folders.` };
+        reach = reached.reach;
+        if (reached.missing.length) this.log(`turn ${short(read.turnId)}: ${reached.missing.length} of what it may read beside its folder is not there`);
+      }
     }
     if (read.workspace !== undefined && offer.unavailable) this.log(`turn ${short(read.turnId)}: ${offer.access ? "files only" : "no workspace"}: ${offer.unavailable}`);
 
@@ -285,7 +296,8 @@ export class Turns {
         ? {
             workspace: {
               access: offer.access!,
-              ...(this.options.box ? { box: this.options.box } : {}),
+              ...(this.options.box ? { box: withReach(this.options.box, reach) } : {}),
+              ...(reach ? { reach } : {}),
               connectorPort: Number(new URL(this.options.baseUrl()).port),
               ...(turn.tmp ? { tmp: turn.tmp } : {}),
               ...(turn.model ? { model: { baseUrl: `${this.options.baseUrl()}/model/${encodeURIComponent(turn.id)}`, secret: turn.model.secret } } : {}),
@@ -295,9 +307,9 @@ export class Turns {
     });
     const timeoutMs = turnTimeoutMs(read.timeoutMs, this.options.timeoutMs);
     if (timeoutMs !== undefined) turn.timer = setTimeout(() => this.end(turn, "timedOut"), timeoutMs);
-    this.log(`turn ${short(turn.id)}: started ${agent.id}${model ? ` (${model}${effort ? `, ${effort}` : ""})` : effort ? ` (${effort})` : ""}${!workspace ? "" : offer.access === "full" ? ", own tools on in its boxed workspace" : `, its file tools only in its workspace${this.options.box ? ", boxed" : ""}`}`);
+    this.log(`turn ${short(turn.id)}: started ${agent.id}${model ? ` (${model}${effort ? `, ${effort}` : ""})` : effort ? ` (${effort})` : ""}${!workspace ? "" : offer.access === "full" ? ", own tools on in its boxed workspace" : `, its file tools only in its workspace${this.options.box ? ", boxed" : ""}`}${reach ? `, ${readsOf(reach).length} more read only beside it` : ""}`);
     void turn.running.done.then((result) => this.finished(turn, result));
-    return { ok: true, agent: agent.id, ...(model ? { model } : {}), ...(effort ? { effort } : {}), workspace: !!workspace, ...(workspace ? { access: offer.access! } : {}) };
+    return { ok: true, agent: agent.id, ...(model ? { model } : {}), ...(effort ? { effort } : {}), workspace: !!workspace, ...(workspace ? { access: offer.access! } : {}), ...(reach ? { read: true } : {}) };
   }
 
   /** The usage limit `agentId` last ran into, while it holds: until a turn of it ends well, or the reset time it gave passes. */
@@ -579,6 +591,8 @@ interface StartBody {
   drafts?: string[];
   /** The caller's folder for a turn with the agent's own tools on, boxed; checked in start. */
   workspace?: string;
+  /** Paths beside the workspace, in the folder that holds it, the agent may read but not change (`reachOf`). */
+  read?: unknown[];
   /** What the turn is for, recorded in the usage log. */
   target?: TurnTarget;
 }
@@ -622,6 +636,7 @@ function readStart(body: unknown): StartBody | { problem: string } {
     ...(value.keepAgentPrompt === true ? { keepAgentPrompt: true } : {}),
     ...(text("instructions") ? { instructions: text("instructions")!.slice(0, 2_000) } : {}),
     ...(typeof value.workspace === "object" && value.workspace !== null ? { workspace: String((value.workspace as Record<string, unknown>).path ?? "") } : {}),
+    ...(typeof value.workspace === "object" && value.workspace !== null && Array.isArray((value.workspace as Record<string, unknown>).read) ? { read: ((value.workspace as Record<string, unknown>).read as unknown[]).slice(0, 50) } : {}),
     ...(target ? { target } : {}),
     // Only names of tools this turn has.
     ...(Array.isArray(value.drafts) ? { drafts: value.drafts.filter((name): name is string => typeof name === "string" && (tools as ToolListing[]).some((tool) => tool.name === name)) } : {}),
