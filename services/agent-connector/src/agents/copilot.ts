@@ -91,6 +91,9 @@ export function copilotAdapter(options: CopilotOptions = {}): AgentAdapter {
     signIn: `${name} login`,
     // From its own install page.
     install: { command: "npm install -g @github/copilot", url: "https://docs.github.com/en/copilot/how-tos/set-up/install-copilot-cli" },
+    // Its npm package from that page (Node 22 or later), and its own sign-in in the browser.
+    setup: { npm: "@github/copilot", signIn: ["login"] },
+    program: where,
     filesOnly: { note: COPILOT_FILES },
     // From its own docs' list of models (November 2026); `auto` lets it pick from what the plan offers.
     models: [

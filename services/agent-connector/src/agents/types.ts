@@ -152,16 +152,28 @@ export interface AgentInstall {
 }
 
 /**
- * What the app's setup can do for an agent with a button, from its own install page: install it with npm, with the
- * Node Open Sourcebook came with, into Open Sourcebook's own folder; and start its own sign-in, which opens the browser
- * and which the setup watches until the agent says it is signed in. Open Sourcebook only starts these: the login is
- * the agent's own, made between it and its provider, and never passes through Open Sourcebook.
+ * What the app's setup can do for an agent with a button, from its own install page, so a person never opens a
+ * terminal: install it, with npm (the Node Open Sourcebook came with, into Open Sourcebook's own folder) where its page
+ * gives an npm package, else with the one-line installer its page gives, run by the launcher with no terminal shown;
+ * and start its own sign-in, which opens the browser and which the setup watches until the agent says it is signed in.
+ * With neither install, setup opens its install page (`AgentInstall.url`). Open Sourcebook only starts these: the login
+ * is the agent's own, made between it and its provider, and never passes through Open Sourcebook.
  */
 export interface AgentSetup {
   /** The npm package its own install page names. */
   readonly npm?: string;
+  /**
+   * The one-line installer its own install page gives, by kind of computer: `unix` (macOS and Linux) runs in `bash`,
+   * `windows` in PowerShell. Used only when there is no `npm`.
+   */
+  readonly script?: { readonly unix?: string; readonly windows?: string };
   /** The arguments of its own sign-in command. */
   readonly signIn?: readonly string[];
+  /**
+   * Its maker's desktop app, which does not give the program Open Sourcebook runs: where it is put on each kind of
+   * computer (`~` is the home folder). When the app is here and the program is not, setup says so plainly.
+   */
+  readonly app?: { readonly label: string; readonly paths: Partial<Record<NodeJS.Platform, readonly string[]>> };
 }
 
 export interface AgentAdapter {
@@ -196,7 +208,7 @@ export interface AgentAdapter {
    * this kind of computer when it gives one. Shown in its "How to connect"; never run by the connector.
    */
   readonly install?: AgentInstall;
-  /** What setup's buttons can do for it; none means it is installed and signed in by hand (`install`, `signIn`). */
+  /** What setup's buttons can do for it; none means its install page is opened and it is signed in by hand (`signIn`). */
   readonly setup?: AgentSetup;
   /** Where its program would be started from now: its name on the PATH, or the install place it was found in. */
   program?(): string;

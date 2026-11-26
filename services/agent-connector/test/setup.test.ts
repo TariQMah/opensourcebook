@@ -13,3 +13,16 @@ test("an agent setup can install or sign in names its npm package and its sign-i
     assert.equal(typeof a.program?.(), "string", `${a.id}: where its program is`);
   }
 });
+
+test("every agent can be got from setup: an npm package, its own installer for each kind of computer, or its install page", () => {
+  for (const a of createDefaultAgents().list()) {
+    const s = a.setup;
+    assert.ok(s?.npm || s?.script?.unix || s?.script?.windows || a.install?.url, `${a.id}: some way to get it`);
+    assert.ok(a.install?.url.startsWith("https://"), `${a.id}: its install page`);
+    if (s?.script) for (const line of [s.script.unix, s.script.windows].filter(Boolean)) assert.match(line!, /https:\/\//, `${a.id}: its installer comes from its own site`);
+    if (s?.app) {
+      assert.ok(s.app.label.length > 0, `${a.id}: its app's name`);
+      for (const paths of Object.values(s.app.paths)) for (const p of paths ?? []) assert.match(p, /^(~\/|\/|[A-Za-z]:\\)/, `${a.id}: an app path from the top or the home folder`);
+    }
+  }
+});

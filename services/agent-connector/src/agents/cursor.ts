@@ -60,6 +60,14 @@ export function cursorAdapter(options: CursorOptions = {}): AgentAdapter {
     signIn: `${name} login`,
     // From its own install page.
     install: { command: "curl https://cursor.com/install -fsS | bash", url: "https://cursor.com/docs/cli/installation" },
+    // The installers that page gives (it has no npm package), and its own sign-in in the browser (docs/cli/reference/
+    // authentication). The Cursor editor app does not give its CLI.
+    setup: {
+      script: { unix: "curl https://cursor.com/install -fsS | bash", windows: "irm 'https://cursor.com/install?win32=true' | iex" },
+      signIn: ["login"],
+      app: { label: "Cursor", paths: { darwin: ["/Applications/Cursor.app", "~/Applications/Cursor.app"] } },
+    },
+    program: where,
     filesOnly: { note: CURSOR_FILES },
     async info(): Promise<AgentInfo> {
       const bin = where();

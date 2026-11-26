@@ -57,6 +57,10 @@ export function openCodeAdapter(options: OpenCodeOptions = {}): AgentAdapter {
     signIn: `${name} auth login`,
     // From its own install page.
     install: { command: "curl -fsSL https://opencode.ai/v2/install | bash", url: "https://opencode.ai/docs" },
+    // Its npm package, which its install page also gives. Its sign-in picks a provider in a terminal, so it has no
+    // button; its free models answer without one. Its desktop app does not give the program.
+    setup: { npm: "@opencode/cli", app: { label: "OpenCode", paths: { darwin: ["/Applications/OpenCode.app", "~/Applications/OpenCode.app"] } } },
+    program: where,
     filesOnly: { note: OPENCODE_FILES },
     async info(): Promise<AgentInfo> {
       const bin = where();

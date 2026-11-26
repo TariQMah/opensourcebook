@@ -95,7 +95,8 @@ export const GATE_HOOK = "opensourcebook-only-opensourcebook-tools";
 export function antigravityAdapter(options: AntigravityOptions = {}): AgentAdapter {
   const name = options.bin ?? "agy";
   // Looked for again at each check and turn, also where it installs itself when that is not on the PATH (./locate.ts).
-  const where = () => programOf(name);
+  // Where its installer puts it on Windows (docs/getting-started), when that is not on the PATH yet.
+  const where = () => programOf(name, ["AppData/Local/agy/bin"]);
   const unready = () => (options.apiKey ? undefined : NO_GEMINI_KEY);
   const catalog = new Remembered<AgentModel[]>(5 * 60_000);
   const stateDir = options.stateDir ?? defaultStateDir();
@@ -169,6 +170,13 @@ export function antigravityAdapter(options: AntigravityOptions = {}): AgentAdapt
     signIn: name,
     // From its own install page (docs/getting-started, the CLI tab): macOS and Linux.
     install: { command: "curl -fsSL https://antigravity.google/cli/install.sh | bash", url: "https://antigravity.google/docs/getting-started?tab=cli" },
+    // The installers that page gives (it has no npm package); the Antigravity app is a separate install that does not
+    // give `agy`. It has no sign-in command of its own (its first run signs in), so no sign-in button.
+    setup: {
+      script: { unix: "curl -fsSL https://antigravity.google/cli/install.sh | bash", windows: "irm https://antigravity.google/cli/install.ps1 | iex" },
+      app: { label: "Antigravity", paths: { darwin: ["/Applications/Antigravity.app", "~/Applications/Antigravity.app"] } },
+    },
+    program: where,
     boxing: { note: ANTIGRAVITY_FULL, unready, upstream: () => (options.apiKey ? { origin: options.apiOrigin ?? GEMINI_API, headers: { "x-goog-api-key": options.apiKey }, allows: geminiAllows } : undefined) },
     // The slugs its documentation names (docs/cli/headless, docs/models); `agy models` gives the account's own.
     models: [
