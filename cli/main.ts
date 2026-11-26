@@ -47,10 +47,14 @@ export interface Options {
   rest: string[];
 }
 
-/** The door a phone comes in by, and the launcher's control of it on 127.0.0.1 (phone.ts). Not programs: the launcher runs them. */
-const PHONE_PORTS = [
+/**
+ * The door a phone comes in by and the launcher's control of it on 127.0.0.1 (phone.ts), and its answers to the engine
+ * about this computer's files (local-files.ts). Not programs: the launcher runs them.
+ */
+const LAUNCHER_PORTS = [
   { name: "phone", port: 5180 },
   { name: "phone-control", port: 5181 },
+  { name: "files", port: 5182 },
 ];
 
 export function parseArgs(argv: string[], env: NodeJS.ProcessEnv = process.env): Options {
@@ -222,7 +226,7 @@ async function startClaimed(options: Options): Promise<number> {
   await ensureChrome();
   if (!(await ensureDatabase())) return 1;
 
-  const wishes = [...PROGRAMS.flatMap((p) => [{ name: p.id, port: p.port }, ...(p.extraPorts ?? [])]), ...PHONE_PORTS].map((w, i) => (options.portsFrom ? { name: w.name, port: options.portsFrom + i } : w));
+  const wishes = [...PROGRAMS.flatMap((p) => [{ name: p.id, port: p.port }, ...(p.extraPorts ?? [])]), ...LAUNCHER_PORTS].map((w, i) => (options.portsFrom ? { name: w.name, port: options.portsFrom + i } : w));
   const ports = await pickPorts(wishes, undefined, claimPort);
   const moved = PROGRAMS.filter((p) => !options.portsFrom && ports[p.id] !== p.port);
   for (const p of moved) quiet(`  ${p.label}: port ${p.port} is already in use by something else, so Open Sourcebook uses ${ports[p.id]} instead.`);

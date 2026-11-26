@@ -10,6 +10,7 @@ import { join } from "node:path";
 import { launchArgs } from "./build.ts";
 import { releasePorts } from "./ports.ts";
 import { OpenCodes, openAddress } from "./opener.ts";
+import { LocalFiles } from "./local-files.ts";
 import { Phone, phoneChoice, rememberPhone } from "./phone.ts";
 import { FRONT, PROGRAMS, startOrder, url, type Program, type Wiring } from "./programs.ts";
 import { clearStopRequest, processStart, removeRunning, stamp, stopAskedOf, writeRunning, STOPS_LOG, type ChildRecord } from "./record.ts";
@@ -76,6 +77,7 @@ export async function run(w: Wiring, options: RunOptions, programs: Program[] = 
   record();
 
   let phone: Phone | undefined;
+  let files: LocalFiles | undefined;
   const openCodes = new OpenCodes();
   let stopping = false;
   const stop = async (code: number, why: string) => {
@@ -83,6 +85,7 @@ export async function run(w: Wiring, options: RunOptions, programs: Program[] = 
     stopping = true;
     note(`Stopping Open Sourcebook: ${why}`);
     await phone?.stop();
+    await files?.stop();
     await stopAll(started);
     removeRunning(w.home, process.pid);
     releasePorts(w.ports);
@@ -128,6 +131,16 @@ export async function run(w: Wiring, options: RunOptions, programs: Program[] = 
 
   say();
   say("Starting");
+  // The engine asks the launcher for the library and a linked folder's files (local-files.ts); without it, it says so.
+  if (w.ports.files && w.secrets.FILES_TOKEN) {
+    files = new LocalFiles({ state: w.home, port: w.ports.files, token: w.secrets.FILES_TOKEN });
+    try {
+      await files.start();
+    } catch (error) {
+      files = undefined;
+      say(`  Linking a project to a folder could not start (${error instanceof Error ? error.message : String(error)}); the rest of Open Sourcebook runs as usual.`);
+    }
+  }
   const width = Math.max(...programs.map((p) => p.label.length)) + 2;
   const launch = (p: Program, again: boolean): Started => {
     const { args, env } = launchArgs(w, p);

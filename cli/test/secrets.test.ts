@@ -61,7 +61,7 @@ test("secrets are random and safe in env files and headers", () => {
 
 test("a file from before the rename keeps its tokens: carried to the new names, never made again", () => {
   const file = join(dir, "old.json");
-  const old = { RE_CLIENT_TOKEN: "client-client-client-client", RE_CONNECTOR_TOKEN: "connector-connector-connector", SCENES_CONNECTOR_TOKEN: "scenes-connector-token-x", SCENES_TOKEN: "scenes-scenes-scenes-scenes", PHONE_TOKEN: "phone-phone-phone-phone" };
+  const old = { RE_CLIENT_TOKEN: "client-client-client-client", RE_CONNECTOR_TOKEN: "connector-connector-connector", SCENES_CONNECTOR_TOKEN: "scenes-connector-token-x", SCENES_TOKEN: "scenes-scenes-scenes-scenes", PHONE_TOKEN: "phone-phone-phone-phone", FILES_TOKEN: "files-files-files-files" };
   writeFileSync(file, JSON.stringify(old));
   // A status or any other command reads them under the new names and writes nothing.
   const read = readSecrets(file);

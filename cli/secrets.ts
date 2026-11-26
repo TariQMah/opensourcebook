@@ -14,6 +14,7 @@ export const SECRET_NAMES = [
   "SCENES_CONNECTOR_TOKEN", // scenes and the connector (OPENSOURCEBOOK_CONNECTOR_SCENES_TOKEN): turns only in the scenes service's own folder
   "SCENES_TOKEN", // engine (SCENES_SERVICE_TOKEN) and the scenes service
   "PHONE_TOKEN", // the web proxy and the launcher's phone control (phone.ts)
+  "FILES_TOKEN", // engine (LOCAL_FILES_TOKEN) and the launcher's answers about this computer's files (local-files.ts)
 ] as const;
 
 export type SecretName = (typeof SECRET_NAMES)[number];

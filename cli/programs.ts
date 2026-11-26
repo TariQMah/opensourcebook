@@ -101,6 +101,8 @@ export function engineSettings(w: Wiring): Record<string, string> {
     CHAT_AGENT_TOKEN: w.secrets.OPENSOURCEBOOK_CONNECTOR_TOKEN,
     SCENES_SERVICE_URL: url(w, "scenes"),
     SCENES_SERVICE_TOKEN: w.secrets.SCENES_TOKEN,
+    // The library and a linked folder's files, which the local runtime cannot read itself (local-files.ts).
+    ...(w.ports.files ? { LOCAL_FILES_URL: url(w, "files"), LOCAL_FILES_TOKEN: w.secrets.FILES_TOKEN } : {}),
   };
 }
 
