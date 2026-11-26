@@ -67,3 +67,31 @@ test("a carry-on turn hears why it was cut off, when known, and what exists in t
   assert.match(turnPrompt(request, listStyles(), undefined, { draft: { scenes: {}, timings: {}, toolCalls: 0 } }), /your turn was cut off\. [^\n]*\nWhat exists:\n- No title or idea said yet\.\n- Style: none picked yet\.\n- No beat written yet\./);
   assert.doesNotMatch(turnPrompt(request, listStyles()), /cut off/);
 });
+
+test("an agent that may read its job folder beside its own is told where that is, and nothing more", () => {
+  for (const access of ["files", "full"] as const) {
+    const beside = systemPrompt(access, [], undefined, true);
+    assert.match(beside, /this video's job folder, one level up \(`\.\.`\), which you can read but not change: `\.\.\/README\.md` says what is there/, access);
+    assert.doesNotMatch(systemPrompt(access), /\.\.\/README\.md/, access);
+  }
+  assert.doesNotMatch(systemPrompt(undefined, [], undefined, true), /README/, "no folder, nothing said");
+  assert.doesNotMatch(systemPrompt("files", [], undefined, true), /only there/);
+});
+
+test("the connector's status says whether the job folder beside the work is opened to the agent", async () => {
+  let agent: Record<string, unknown> = {};
+  const server = createServer((_req, res) => res.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify({ agent: "claude", agents: [{ id: "claude", label: "Claude Code", installed: true, signedIn: true, ...agent }] })));
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const url = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+  try {
+    const status = async () => new Connector({ url, token: "t" }).status();
+    agent = { workspace: true, workspaceAccess: "files", workspaceReads: true };
+    assert.equal((await status()).reads, true);
+    agent = { workspace: true, workspaceAccess: "files" };
+    assert.equal((await status()).reads, undefined);
+    agent = { workspace: false, workspaceReads: true };
+    assert.equal((await status()).reads, undefined, "no folder, nothing beside it");
+  } finally {
+    server.close();
+  }
+});

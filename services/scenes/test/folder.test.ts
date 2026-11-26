@@ -5,12 +5,13 @@
  */
 import assert from "node:assert/strict";
 import { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readlinkSync, rmSync, writeFileSync } from "node:fs";
+import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, test } from "node:test";
 import { Connector } from "../src/connector.ts";
-import { copyToLibrary, folderName, openCommand, toRemove, writeJobFolder } from "../src/folder.ts";
+import { BESIDE_WORK, copyToLibrary, folderName, openCommand, toRemove, writeJobFolder } from "../src/folder.ts";
 import { Jobs, type JobRecord } from "../src/jobs.ts";
 import { readRequest, type VideoRequest } from "../src/request.ts";
 import { createScenesServer } from "../src/server.ts";
@@ -81,8 +82,11 @@ test("the job folder holds the note, a link to each file on disk, the sources li
   assert.match(note, /Walk through the stages of cell division\./);
   assert.match(note, /- What a cell is/);
   assert.match(note, /Length: about 2 minutes\./);
-  assert.match(note, /- Chapter 4 \(pdf\): `extracted\/src_a\/text\.md`, 2 passages, 1 pictures/);
-  assert.match(note, /`work\/`/);
+  // Each path as the agent reaches it from its own folder, work/, one level down.
+  assert.match(note, /- Chapter 4 \(pdf\): `\.\.\/extracted\/src_a\/text\.md`, 2 passages, 1 pictures, the original at `\.\.\/sources\/src_a-chapter-4\.pdf`/);
+  assert.match(note, /- A page \(web\): `\.\.\/extracted\/web-1\/text\.md`, 1 passages, from https:\/\/example\.org\/page/);
+  for (const path of ["../README.md", "../sources/sources.json", "../sources/", "../extracted/<source>/text.md", "../extracted/<source>/pictures/", "work/"]) assert.ok(note.includes(`\`${path}\``), path);
+  assert.deepEqual([...BESIDE_WORK], ["README.md", "sources", "extracted"]);
 });
 
 test("without sources from the engine the folder is made from the passages alone, and a missing file is no link", async () => {
@@ -191,4 +195,59 @@ test("a new job gets its folder before the agent is asked, is cleaned up once it
   assert.equal(jobs.get("job-1"), undefined);
   assert.ok(existsSync(jobs.folder(second.id)));
   assert.ok(existsSync(join(dataDir, "audio")));
+});
+
+test("job folders go in their own folder when one is set, and the agent reads the rest of its job folder beside its work where the connector opens it", async () => {
+  const dataDir = join(root, "service-data");
+  const jobsDir = join(root, "jobs-only");
+  for (const reads of [true, false]) {
+    const starts: any[] = [];
+    const server = createServer(async (req, res) => {
+      let raw = "";
+      for await (const chunk of req) raw += chunk;
+      if (req.url === "/status") return res.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify({ agent: "fake", agents: [{ id: "fake", label: "Fake", installed: true, signedIn: true, workspace: true, workspaceAccess: "files", ...(reads ? { workspaceReads: true } : {}) }] }));
+      if (req.method === "POST" && req.url === "/turns") {
+        const start = JSON.parse(raw);
+        starts.push(start);
+        res.writeHead(202, { "content-type": "application/json" }).end(JSON.stringify({ ok: true, agent: "fake", workspace: true }));
+        // The agent ends at once, failing, so the job ends after one start.
+        await fetch(`${start.callback.url}/finish`, { method: "POST", headers: { authorization: `Bearer ${start.callback.token}`, "content-type": "application/json" }, body: JSON.stringify({ outcome: "failed", problem: "error" }) });
+        return;
+      }
+      res.writeHead(404).end();
+    });
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    let base = "";
+    const connector = new Connector({ url: `http://127.0.0.1:${(server.address() as AddressInfo).port}`, token: "connector-token-0123456789" });
+    const jobs = new Jobs({ dataDir, jobsDir, connector, voice: silentVoice(), styles: listStyles, callbackBase: () => base, log: () => undefined, resumeDelaysMs: [60_000] });
+    const scenes = createScenesServer({ token: "scenes-token-0123456789", jobs, connector, voice: silentVoice(), styles: allStyles, dataDir });
+    await new Promise<void>((resolve) => scenes.listen(0, "127.0.0.1", resolve));
+    base = `http://127.0.0.1:${(scenes.address() as AddressInfo).port}`;
+    const id = `job-${reads ? "reads" : "alone"}`;
+    try {
+      jobs.create({ ...request(), id });
+      for (let i = 0; i < 200 && !starts.length; i++) await new Promise((r) => setTimeout(r, 25));
+      const folder = join(jobsDir, id);
+      assert.equal(jobs.folder(id), folder);
+      assert.ok(existsSync(join(folder, "job.json")) && !existsSync(join(dataDir, id)), "the job folder is in the jobs folder, not beside the service's files");
+      const start = starts[0];
+      assert.equal(start.workspace.path, join(folder, "work"));
+      if (reads) {
+        assert.deepEqual(start.workspace.read, [join(folder, "README.md"), join(folder, "sources"), join(folder, "extracted")]);
+        assert.match(start.systemPrompt, /one level up \(`\.\.`\), which you can read but not change: `\.\.\/README\.md` says what is there/);
+        assert.match(start.systemPrompt, /Your own file tools work there: read, write/);
+      } else {
+        assert.equal(start.workspace.read, undefined, "a connector that can't open it read only gets the work folder alone");
+        assert.doesNotMatch(start.systemPrompt, /\.\.\/README\.md/);
+        assert.match(start.systemPrompt, /Your own file tools work there and only there/);
+      }
+    } finally {
+      // The job ends before the folders go: it fails on the agent's end, or is stopped.
+      for (let i = 0; i < 200 && !["failed", "stopped"].includes(jobs.get(id)?.state ?? "failed"); i++) await new Promise((r) => setTimeout(r, 25));
+      await jobs.stop(id);
+      await new Promise((r) => setTimeout(r, 200));
+      scenes.close();
+      server.close();
+    }
+  }
 });

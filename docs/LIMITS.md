@@ -31,6 +31,7 @@ Used most with Claude Code and Codex. If an agent fails for you, open an issue a
 | Audio | needs a voice (an ElevenLabs or Speechify key, or Kokoro); not available without one | made with Kokoro in our own runs; not tried by hand | not tested yet, help wanted |
 | The video voice | your ElevenLabs or Speechify key, or Kokoro (not tried on a Mac yet); without any, no sound | your ElevenLabs or Speechify key, or Kokoro (voiced and rendered in our own runs); without any, no sound | your ElevenLabs or Speechify key, or Kokoro (not tried); without any, no sound |
 | The agent's own tools in a sandbox (video work on an API key) | works, using the Mac's own sandbox | not available | not available |
+| The video agent reading its job folder (the note, the sources, what was read from them) beside its own folder | read only, inside the Mac's own sandbox, for Claude Code, Codex and Antigravity; OpenCode, Cursor and GitHub Copilot run outside it and get their own folder alone | not available: no sandbox yet, so every agent gets its own folder alone and the sources in its instructions | not available, as on Linux |
 | A phone on the same Wi-Fi | covered by tests; not tried on a real phone | same | same |
 
 What the one-line install has and has not been tried on, in full: [`install/README.md`](../install/README.md).

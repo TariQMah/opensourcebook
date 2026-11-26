@@ -10,6 +10,9 @@ import { copyFileSync, existsSync, mkdirSync, rmSync, statSync, symlinkSync, wri
 import { basename, isAbsolute, join } from "node:path";
 import type { JobSource, SourcePicture, VideoRequest } from "./request.ts";
 
+/** What in a job folder the video agent may read beside its own `work/`, without changing it. */
+export const BESIDE_WORK = ["README.md", "sources", "extracted"] as const;
+
 /** How many pictures of one source are saved, and how big each may be. */
 export const MAX_PICTURES = 60;
 export const MAX_PICTURE_BYTES = 20_000_000;
@@ -122,14 +125,16 @@ function readme(request: VideoRequest, entries: SourceEntry[], passages: Map<str
   if (request.assumes.length) lines.push("The viewer already knows:", "", ...request.assumes.map((a) => `- ${a}`), "");
   const facts = [long ? `Length: ${long}.` : "", request.style !== "auto" ? `Style: ${request.style}.` : "", `Frame: ${request.frame.width} by ${request.frame.height}.`].filter(Boolean);
   lines.push(facts.join(" "), "", "## Where its files are", "");
-  lines.push("- `sources/sources.json`: every source of this video, with where it came from.");
-  if (entries.some((e) => e.link)) lines.push("- `sources/`: a link to each source that is a file on this computer, the original itself.");
-  lines.push("- `extracted/<source>/text.md`: each source's text as it was read, one heading per passage; a cite names the passage by the id in its heading.");
-  if ([...pictures.values()].some((n) => n > 0)) lines.push("- `extracted/<source>/pictures/`: the pictures kept from a source, listed with their captions and pages in its `pictures.json`.");
-  lines.push("- `work/`: the agent's own folder for this video.", "", "## Sources", "");
+  lines.push("The video agent's own folder is `work/`, inside this one. The rest is here to read, not to change; from `work/` it is one level up:", "");
+  lines.push("- `../README.md`: this note.");
+  lines.push("- `../sources/sources.json`: every source of this video, with where it came from.");
+  if (entries.some((e) => e.link)) lines.push("- `../sources/`: a link to each source that is a file on this computer, the original itself.");
+  lines.push("- `../extracted/<source>/text.md`: each source's text as it was read, one heading per passage; a cite names the passage by the id in its heading.");
+  if ([...pictures.values()].some((n) => n > 0)) lines.push("- `../extracted/<source>/pictures/`: the pictures kept from a source, listed with their captions and pages in its `pictures.json`.");
+  lines.push("- `work/` (`./` from inside it): the agent's own folder for this video, its `skills/` and what it writes.", "", "## Sources", "");
   for (const e of entries) {
     const count = pictures.get(e.id) ?? 0;
-    lines.push(`- ${e.title} (${e.kind}): \`${e.extracted}/text.md\`, ${passages.get(e.id) ?? 0} passages${count ? `, ${count} pictures` : ""}${e.url ? `, from ${e.url}` : ""}`);
+    lines.push(`- ${e.title} (${e.kind}): \`../${e.extracted}/text.md\`, ${passages.get(e.id) ?? 0} passages${count ? `, ${count} pictures` : ""}${e.link ? `, the original at \`../${e.link}\`` : ""}${e.url ? `, from ${e.url}` : ""}`);
   }
   return `${lines.join("\n")}\n`;
 }

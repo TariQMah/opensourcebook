@@ -45,15 +45,18 @@ export const notGiven = (video: ForVideo): string[] => skillFiles(video).filter(
  * The instructions for a video's turn: the work, what Open Sourcebook needs, where the skills are, and what the agent's own tools can
  * do in its folder, as the connector offered it: `files` its file tools only, `full` also its shell and the web
  * (`true` is `full`, as before), none without a folder. With `knowledge`, the skills' pages that bear on every video
- * follow, whole (src/knowledge.ts); without it, only the index of skills, as before.
+ * follow, whole (src/knowledge.ts); without it, only the index of skills, as before. With `beside`, the agent may also
+ * read its job folder around its own (its note, sources and what was read from them), and is told where that is.
  */
-export function systemPrompt(workspace?: "files" | "full" | boolean, extra: readonly ExtraSkill[] = [], knowledge?: GivenKnowledge): string {
+export function systemPrompt(workspace?: "files" | "full" | boolean, extra: readonly ExtraSkill[] = [], knowledge?: GivenKnowledge, beside = false): string {
   const access = workspace === true ? "full" : workspace || undefined;
+  // With `beside`, the job folder around it is open to read (docs/JOB-FOLDER.md): where its note is, nothing more.
+  const around = beside ? " It sits in this video's job folder, one level up (`..`), which you can read but not change: `../README.md` says what is there, the sources and what was read from them." : "";
   const folder =
     access === "full"
-      ? "\n\n# Your folder\nYour current folder is this video's own. Your own tools work there: your shell, files, web search and fetch, walled in to that folder and the web."
+      ? `\n\n# Your folder\nYour current folder is this video's own. Your own tools work there: your shell, files, web search and fetch, walled in to that folder and the web.${around}`
       : access === "files"
-        ? "\n\n# Your folder\nYour current folder is this video's own. Your own file tools work there and only there: read, write, edit and search files, and keep notes. You have no shell and no web of your own in this turn; everything else goes through Open Sourcebook's tools."
+        ? `\n\n# Your folder\nYour current folder is this video's own. Your own file tools work there${beside ? "" : " and only there"}: read, write, edit and search files, and keep notes. You have no shell and no web of your own in this turn; everything else goes through Open Sourcebook's tools.${around}`
         : "";
   const where = access
     ? "They are in skills/ in your folder, as files: each folder's SKILL.md first, and what it points to when you want more. read_skill reads them too."

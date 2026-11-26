@@ -37,7 +37,18 @@ The launcher sets them from one setting, `OPENSOURCEBOOK_APP_DATA`, the app data
 | `work/` | The agent's own folder, as before: its `skills/` and whatever it writes. |
 | `job.json`, `draft.json`, `video.mp4`, the builds, stills and voice | The service's own files, as before. |
 
-The agent's own tools are boxed to `work/` (`services/agent-connector/src/box.ts`), so today it gets the sources inline and through its tools as before; opening `README.md`, `sources/` and `extracted/` to it, read only, is the next step of the video work.
+## What the agent reaches
+
+The agent starts in `work/`, and writes only there. Where the connector can hold it to reading, it also reads `README.md`, `sources/` (with the exact file each link there leads to, never the folder that file is in) and `extracted/`, one level up, and changes none of it: the scenes service names those three beside `work/` when it starts a turn (`workspace.read`), the connector opens them read only (`services/agent-connector/README.md`, "Reading beside the folder"), and the agent's instructions say where its job folder is. The note gives every path as the agent reaches it from `work/` (`../README.md`, `../extracted/<source>/text.md`). The service's own files in the job folder (`job.json`, `draft.json`, the builds) stay shut.
+
+| Agent | Beside `work/` |
+| --- | --- |
+| Claude Code, on its own login or an API key | read only, on a Mac, inside the Mac's sandbox |
+| Codex, Antigravity, on an API key | read only, on a Mac, inside the Mac's sandbox |
+| OpenCode, Cursor, GitHub Copilot | nothing: they run outside the sandbox, and their own rules can't open one file read only |
+| Any agent on Linux or Windows | nothing: there is no sandbox there yet |
+
+An agent that gets `work/` alone has its sources inline and through Open Sourcebook's tools, as before. The connector works out what may be read as one plain list of folders and files, which a sandbox on Linux or Windows is meant to take when there is one.
 
 `<source>` is the source's id with anything but letters, digits, `-`, `_` and `.` turned into `_`. Nothing new is read from a source for its job folder: it holds only what the engine already has.
 

@@ -35,6 +35,8 @@ export interface AgentStatus {
   workspace?: boolean;
   /** Which of its own tools it has there: `files` (its file tools only, on its own login) or `full` (also its shell and the web, boxed). */
   access?: "files" | "full";
+  /** What a turn names beside its folder (`StartTurn.workspace.read`) is opened to this agent here, read only. */
+  reads?: boolean;
   /** True when this agent's adapter declares that work turns can replace its built-in instructions. */
   replacesWorkPrompt?: boolean;
 }
@@ -50,8 +52,11 @@ export interface StartTurn {
   timeoutMs: number;
   /** Add the system prompt to the agent's own instructions instead of replacing them. */
   keepAgentPrompt?: boolean;
-  /** A folder for the agent to work in with its own tools on, as far as the connector allows (`AgentStatus.access`). */
-  workspace?: { path: string };
+  /**
+   * A folder for the agent to work in with its own tools on, as far as the connector allows (`AgentStatus.access`), and
+   * what beside it, in the folder that holds it, the agent may read without changing, where it can (`AgentStatus.reads`).
+   */
+  workspace?: { path: string; read?: string[] };
   /** An agent, model, and effort for this turn alone, over the ones set for videos. */
   agent?: string;
   model?: string;
@@ -114,6 +119,7 @@ export class Connector {
           unavailable?: string;
           workspace?: boolean;
           workspaceAccess?: string;
+          workspaceReads?: boolean;
           defaultModels?: { work?: string };
           defaultEfforts?: { work?: string };
           replacesWorkPrompt?: boolean;
@@ -134,6 +140,7 @@ export class Connector {
         ...(effort ? { effort } : {}),
         // A connector from before files-only folders offered only the full one.
         ...(agent?.workspace ? { workspace: true, access: agent.workspaceAccess === "files" ? ("files" as const) : ("full" as const) } : {}),
+        ...(agent?.workspace && agent.workspaceReads === true ? { reads: true } : {}),
         ...(agent?.replacesWorkPrompt === true ? { replacesWorkPrompt: true } : {}),
         ...(!agent || !agent.installed || agent.unavailable ? { problem: "agentMissing" as const } : agent.signedIn === false && !agent.apiKey ? { problem: "agentSignedOut" as const } : {}),
       };

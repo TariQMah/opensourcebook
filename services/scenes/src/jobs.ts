@@ -18,7 +18,7 @@ import { randomBytes, timingSafeEqual } from "node:crypto";
 import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { join, relative, sep } from "node:path";
 import { readLimit, type AgentProblem, type Connector, type LimitReset } from "./connector.ts";
-import { copyToLibrary, KEEP, toRemove, writeJobFolder, type Keep } from "./folder.ts";
+import { BESIDE_WORK, copyToLibrary, KEEP, toRemove, writeJobFolder, type Keep } from "./folder.ts";
 import { finalBuild, renderVideo, voiceAll } from "./produce.ts";
 import { forVideo, INSTRUCTIONS, systemPrompt, turnPrompt } from "./prompt.ts";
 import { writeSkills } from "./skills.ts";
@@ -686,7 +686,9 @@ export class Jobs {
       writeSkills(join(work, "skills"), video);
     }
     // The pages that bear on every video, whole, with the instructions; the index alone with SCENES_AGENT_KNOWLEDGE=index.
-    const system = systemPrompt(work ? (status.access ?? "full") : undefined, job.request.skills ?? [], this.o.knowledge !== false ? { video, style, open: job.request.style === "auto" && !draft.style } : undefined);
+    // The rest of the job folder (its note, sources and what was read from them), to read beside the work, where the connector can open it so.
+    const beside = work && status.reads ? BESIDE_WORK.map((part) => join(this.folder(job.id), part)) : undefined;
+    const system = systemPrompt(work ? (status.access ?? "full") : undefined, job.request.skills ?? [], this.o.knowledge !== false ? { video, style, open: job.request.style === "auto" && !draft.style } : undefined, !!beside);
     // A remake's ask goes with every writing turn of it (a carry-on too), never with a polish, a repair or a revise.
     const remake = job.remake && !polish && !repair && !revise ? { beat: job.remake.beat, ...(job.remake.note ? { note: job.remake.note } : {}), draft } : undefined;
     const prompt = turnPrompt(job.request, styles, problems, carry !== undefined ? { ...(carry ? { why: carry } : {}), draft } : undefined, polish, remake);
@@ -706,7 +708,7 @@ export class Jobs {
       ...(job.request.model ? { model: job.request.model } : {}),
       ...(job.request.effort ? { effort: job.request.effort } : {}),
       target: { type: "video", id: job.id },
-      ...(work ? { workspace: { path: work } } : {}),
+      ...(work ? { workspace: { path: work, ...(beside ? { read: beside } : {}) } } : {}),
     });
     if (!started.ok) {
       this.turns.delete(turnId);

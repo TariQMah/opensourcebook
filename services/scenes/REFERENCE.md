@@ -89,7 +89,7 @@ Every address is checked before it is fetched, and again after each redirect: on
 
 ## The workspace
 
-Where the agent connector has its box (macOS; `services/agent-connector/README.md`, "A workspace"), each video's turn also gets the agent's own tools, its shell, files and web, in the video's folder `work/`, walled off from the rest of the computer and from your own logins (the agent signs in there with a token of its own; without it its own tools stay off). The system prompt then says so, and `save_image` keeps a file from there (`from: "work/chart.png"`, with `source` when it came from elsewhere). `SCENES_AGENT_WORKSPACE=off` keeps the agent's own tools off.
+Where the agent connector has its box (macOS; `services/agent-connector/README.md`, "A workspace"), each video's turn also gets the agent's own tools, its shell, files and web, in the video's folder `work/`, walled off from the rest of the computer and from your own logins (the agent signs in there with a token of its own; without it its own tools stay off). The system prompt then says so, and `save_image` keeps a file from there (`from: "work/chart.png"`, with `source` when it came from elsewhere). Where the connector can hold it to reading (`workspaceReads` in its status), the turn also names the rest of the video's job folder beside `work/` (`README.md`, `sources/`, `extracted/`) for the agent to read without changing it, and the system prompt says where that is (`docs/JOB-FOLDER.md`, "What the agent reaches"). `SCENES_AGENT_WORKSPACE=off` keeps the agent's own tools off.
 
 ## Contract
 
