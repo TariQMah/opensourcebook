@@ -5,6 +5,9 @@ The newest first. `opensourcebook update` prints the lines here that your copy d
 ## 2026-11-26
 
 - Settings > Backups saves every project in one file, with its sources, chats, plans and everything made, videos included, and restores it here or on another computer. A project you have already is never changed unless you choose: keep both, or replace yours. Files of a linked folder stay where they are; the backup keeps where they were.
+- Settings > Backups can back up every project once a week into the Backups folder of your library, keeping the newest few (four unless you pick another number), and says when the last one was made. It is off until you turn it on, because each backup holds every video you made and goes into your own folder. `opensourcebook backup` makes one now.
+- Settings has Get set up, the same list first-time setup shows (a coding agent, its sign-in, ffmpeg and a voice, each with the button that fixes it), to come back to any time.
+- In the desktop app, a page that asks for a fresh one after Open Sourcebook was started again shows it in the app's own window, not in your browser.
 - Home can keep your projects in folders: make one with New folder, put a project in it from its menu with Move to folder, and search inside it. Deleting a folder puts its projects back on Home and deletes none.
 - Open Sourcebook no longer slows your computer down while it reads a web page, and videos play without pausing every few seconds. The engine had kept trying to download a whole browser (about 150 MB) in the background, and every video seek read the whole video file again; now pages are read without that browser and a video sends only the part being played. Run `opensourcebook update` to get it.
 
