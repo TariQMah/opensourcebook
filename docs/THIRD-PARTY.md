@@ -51,7 +51,7 @@ Licences as published by each package when this page was written.
 | engine, web | `@img/sharp-libvips-*` (through `wrangler`, a build tool, not shipped) | LGPL-3.0-or-later | The local Workers runtime's image support |
 | all | `typescript`, `vitest`, `vite`, `wrangler` and other build and test tools | MIT, Apache-2.0 or both, unless named above | Building and testing |
 
-Kokoro, the voice that runs on the computer (`services/scenes/voices/kokoro/`), is not part of Open Sourcebook's install: a person installs it with `npm run voice:kokoro`, into its own folder, and it runs in its own process.
+Kokoro, the voice that runs on the computer (`services/scenes/voices/kokoro/`), is not part of Open Sourcebook's install: a person installs it from Settings > Voice or with `opensourcebook voice install kokoro`, into its own folder, and it runs in its own process.
 
 | Program | Package | Licence | Used for |
 |---|---|---|---|
