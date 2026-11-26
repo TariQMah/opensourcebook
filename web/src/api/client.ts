@@ -4,6 +4,7 @@ import type {
   ActivityQuery,
   Json,
   PhoneStatus,
+  VoiceInstallState,
   AgentPick,
   AgentPickPatch,
   AgentStatus,
@@ -543,6 +544,14 @@ export class ApiClient {
   }
   unpairDevice(id: string): Promise<PhoneStatus> {
     return this.request("DELETE", `/phone/devices/${enc(id)}`);
+  }
+
+  // A voice that runs on this computer, installed by the launcher (cli/voice.ts), through the proxy. Only this computer reaches it.
+  installVoice(id: string): Promise<VoiceInstallState> {
+    return this.request("POST", `/launcher/voices/${enc(id)}/install`);
+  }
+  voiceInstall(id: string): Promise<VoiceInstallState> {
+    return this.request("GET", `/launcher/voices/${enc(id)}`);
   }
 
   /** A harvested asset's URL, through the proxy. */

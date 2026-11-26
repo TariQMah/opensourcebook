@@ -80,6 +80,29 @@ test("a voice on this computer that isn't installed shows its install command, a
   await vi.waitFor(() => expect(calls.filter((c) => c.path === "/v1/voice").length).toBe(before + 1));
 });
 
+test("Install it has the launcher install a voice on this computer, then checks again by itself", async () => {
+  const { calls } = renderWithEngine(<VoiceSetup />, {
+    "POST /launcher/voices/:id/install": [202, { voice: "local-b", state: "installing", since: "2026-11-26T00:00:00.000Z" }],
+    "GET /launcher/voices/:id": { voice: "local-b", state: "done" },
+  });
+  await userEvent.click(await screen.findByRole("button", { name: "On this computer" }));
+  const before = calls.filter((c) => c.path === "/v1/voice").length;
+  await userEvent.click(screen.getByRole("button", { name: "Install it" }));
+  expect(calls.some((c) => c.method === "POST" && c.path === "/launcher/voices/local-b/install")).toBe(true);
+  await vi.waitFor(() => expect(calls.filter((c) => c.path === "/v1/voice").length).toBe(before + 1));
+});
+
+test("an install that could not finish says why, and the terminal line is still there", async () => {
+  renderWithEngine(<VoiceSetup />, {
+    "POST /launcher/voices/:id/install": [202, { voice: "local-b", state: "installing", since: "2026-11-26T00:00:00.000Z" }],
+    "GET /launcher/voices/:id": { voice: "local-b", state: "failed", message: "It did not finish. What it said is in voice-local-b.log." },
+  });
+  await userEvent.click(await screen.findByRole("button", { name: "On this computer" }));
+  await userEvent.click(screen.getByRole("button", { name: "Install it" }));
+  expect(await screen.findByRole("alert")).toHaveTextContent("It did not finish.");
+  expect(screen.getByText("npm run voice:local")).toBeInTheDocument();
+});
+
 test("compact, with nothing chosen, asks to pick a service first and calls onDone once a voice is picked", async () => {
   const onDone = vi.fn();
   const hostedOnly = { ...noKey, services: [{ ...sampleVoiceSetup.services[0]!, keySet: true }] };

@@ -1,4 +1,4 @@
-import { useId, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { errorText, isApiError } from "../api/errors";
 import type { VoiceOption, VoiceServiceView, VoiceSetup as Setup } from "../api/types";
 import { useApi } from "../app/context";
@@ -260,24 +260,80 @@ function KeyNote({ service: s }: { service: VoiceServiceView }) {
   );
 }
 
-/** A voice that runs on this computer: installed or not, and if not, the command that installs it, run once. */
+/** How often the screen asks how an install is going. */
+const INSTALL_POLL_MS = 3000;
+
+/**
+ * A voice that runs on this computer: installed or not. If not, a button that has the launcher install it with the
+ * Node Open Sourcebook came with (cli/voice.ts), and the command that does the same in a terminal, run once.
+ */
 function LocalSetup({ service: s, checking, onCheck }: { service: VoiceServiceView; checking: boolean; onCheck: () => void }) {
+  const client = useApi();
+  const [install, setInstall] = useState<{ state: "idle" | "installing" | "failed"; message?: string }>({ state: "idle" });
+  const alive = useRef(true);
+  useEffect(() => () => void (alive.current = false), []);
   if (s.installed) return <p className="vs-d">{s.about}</p>;
+
+  async function follow(): Promise<void> {
+    for (;;) {
+      if (!alive.current) return;
+      const now = await client.voiceInstall(s.id);
+      if (now.state === "installing") {
+        await new Promise((done) => setTimeout(done, INSTALL_POLL_MS));
+        continue;
+      }
+      if (now.state === "done") {
+        setInstall({ state: "idle" });
+        onCheck();
+      } else setInstall({ state: "failed", message: now.state === "failed" ? now.message : "It stopped before it finished. Press Install again." });
+      return;
+    }
+  }
+  async function start() {
+    setInstall({ state: "installing" });
+    try {
+      const started = await client.installVoice(s.id);
+      if (started.state === "failed") setInstall({ state: "failed", message: started.message });
+      else await follow();
+    } catch (e) {
+      if (alive.current) setInstall({ state: "failed", message: errorText(e) });
+    }
+  }
+
+  const installing = install.state === "installing";
   return (
     <div className="vs-local">
       <p className="vs-d">
-        {s.about} It isn't installed yet. Run this once in a terminal{s.install ? <>, in <code>{s.install.folder}</code></> : ""}, then check again.
+        {s.about} It isn't installed yet.
       </p>
-      {s.install && (
-        <div className="vs-cmd">
-          <code>{s.install.command}</code>
-          <button className="mini" type="button" onClick={() => void navigator.clipboard?.writeText(s.install!.command)}>
-            <Icon name="copy" />
-            Copy
-          </button>
-        </div>
+      <div className="vs-install">
+        <button className="mini go" type="button" disabled={installing || checking} onClick={() => void start()}>
+          {installing ? "Installing…" : "Install it"}
+        </button>
+        {installing && (
+          <span className="vs-d" role="status">
+            This downloads a few hundred MB once and can take several minutes. You can keep using Open Sourcebook meanwhile.
+          </span>
+        )}
+      </div>
+      {install.state === "failed" && (
+        <p className="vs-err" role="alert">
+          {install.message}
+        </p>
       )}
-      <button className="mini" type="button" disabled={checking} onClick={onCheck}>
+      {s.install && (
+        <>
+          <p className="vs-d">Or run this once in a terminal{s.install.folder ? <>, in <code>{s.install.folder}</code></> : ""}, then check again:</p>
+          <div className="vs-cmd">
+            <code>{s.install.command}</code>
+            <button className="mini" type="button" onClick={() => void navigator.clipboard?.writeText(s.install!.command)}>
+              <Icon name="copy" />
+              Copy
+            </button>
+          </div>
+        </>
+      )}
+      <button className="mini" type="button" disabled={checking || installing} onClick={onCheck}>
         {checking ? "Checking…" : "Check again"}
       </button>
     </div>

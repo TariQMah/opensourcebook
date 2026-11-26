@@ -1095,7 +1095,7 @@ export interface VoiceServiceView {
   /** A local one: whether it is installed. */
   installed?: boolean;
   /** A local one: what to run, and where, to install it. */
-  install?: { command: string; folder: string };
+  install?: { command: string; folder?: string };
   listsVoices: boolean;
   /** Whether it offers a sample of its voices to hear; with none, no voice of it has a play button. */
   samples: boolean;
@@ -1182,6 +1182,9 @@ export interface PairedDevice {
   pairedAt: string;
   lastSeenAt: string;
 }
+
+/** An install of a voice that runs on this computer, as the launcher runs it (cli/voice.ts). */
+export type VoiceInstallState = { voice: string } & ({ state: "idle" } | { state: "installing"; since: string } | { state: "done" } | { state: "failed"; message: string });
 
 export interface PhoneStatus {
   /** Whether phones on the home network may open Open Sourcebook (once paired). */

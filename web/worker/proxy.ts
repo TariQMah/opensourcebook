@@ -20,7 +20,8 @@
  *
  * `/api/phone/...` goes the same way to the launcher's phone control (cli/phone.ts) with its own token,
  * PHONE_TOKEN: Settings turns "Open on your phone" on and off, shows the pairing code and lists paired devices.
- * Only "browser" may use it, whatever the path's spelling: the decision is by who is calling.
+ * Only "browser" may use it, whatever the path's spelling: the decision is by who is calling. `/api/launcher/...` goes
+ * there too, for what only the launcher can do (installing a voice that runs on this computer), by the same rule.
  */
 
 export interface ProxyEnv {
@@ -154,6 +155,11 @@ export async function proxy(
     if (who !== "browser") return error(403, "this_computer_only", "Paired devices are managed in this computer's browser.");
     return phone(request, url, env, fetchImpl);
   }
+  // What only the launcher on this computer can do, such as installing a voice that runs here: the same way, this computer's browser only.
+  if (url.pathname.toLowerCase().startsWith("/api/launcher/")) {
+    if (who !== "browser") return error(403, "this_computer_only", "This is done in the browser on the computer Open Sourcebook runs on.");
+    return phone(request, url, env, fetchImpl, "This");
+  }
   if (!url.pathname.startsWith(PREFIX + "v1/")) return error(404, "not_found", "No such route.");
   // Opening a folder in the file manager is for the person at this computer, never a paired phone.
   if (who !== "browser" && opensFiles(url.pathname)) return error(403, "this_computer_only", "A job's files open only in the browser on the computer Open Sourcebook runs on.");
@@ -275,11 +281,11 @@ function openPage(): Response {
 const PHONE_METHODS = new Set(["GET", "POST", "DELETE"]);
 
 /** Settings > Phone, through to the launcher's phone control with its token. */
-async function phone(request: Request, url: URL, env: ProxyEnv, fetchImpl: typeof fetch): Promise<Response> {
+async function phone(request: Request, url: URL, env: ProxyEnv, fetchImpl: typeof fetch, what = "Opening Open Sourcebook on a phone"): Promise<Response> {
   if (!PHONE_METHODS.has(request.method)) return error(405, "method_not_allowed", "Method not allowed.");
   if (request.method !== "GET" && crossSite(request, url)) return error(403, "cross_site", "Requests must come from this site.");
   if (!env.PHONE_URL || !env.PHONE_TOKEN) {
-    return error(503, "phone_unavailable", "Opening Open Sourcebook on a phone needs it started the usual way, with all its parts, not the web app alone.");
+    return error(503, "phone_unavailable", `${what} needs it started the usual way, with all its parts, not the web app alone.`);
   }
   let upstream: Response;
   try {

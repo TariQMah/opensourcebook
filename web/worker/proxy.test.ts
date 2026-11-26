@@ -131,6 +131,21 @@ describe("/api/phone, to the launcher's phone control", () => {
   });
 });
 
+describe("/api/launcher, to what only the launcher can do", () => {
+  const withPhone = { ...env, PHONE_URL: "http://127.0.0.1:5181", PHONE_TOKEN: "phone-secret" };
+
+  test("starts a voice install with the phone token, and refuses one from another site", async () => {
+    const { calls, fetchImpl } = engine(202, { voice: "kokoro", state: "installing" });
+    const res = await proxy(new Request("https://web.test/api/launcher/voices/kokoro/install", { method: "POST", headers: { origin: "https://web.test" } }), withPhone, fetchImpl);
+    expect(res.status).toBe(202);
+    expect(calls[0]).toMatchObject({ url: "http://127.0.0.1:5181/launcher/voices/kokoro/install", init: { method: "POST" } });
+    expect(new Headers(calls[0]?.init.headers).get("x-phone-token")).toBe("phone-secret");
+    const evil = await proxy(new Request("https://web.test/api/launcher/voices/kokoro/install", { method: "POST", headers: { origin: "https://evil.test" } }), withPhone, fetchImpl);
+    expect(evil.status).toBe(403);
+    expect(calls).toHaveLength(1);
+  });
+});
+
 describe("who may use the engine through this proxy", () => {
   // As `npm start` runs it: a browser key and a door key for this run, and the launcher's control.
   const run = {
