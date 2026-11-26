@@ -3,13 +3,13 @@ import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ApiClient } from "../../api/client";
-import type { RestoreChoice, RestoreView } from "../../api/types";
+import type { RestoreChoice, RestoreView, WeeklyBackup } from "../../api/types";
 import { Ctx } from "../../app/context";
 import { forgetThisComputer } from "../../app/thisComputer";
 import { BackupsSection } from "./BackupsSection";
 
 function show(client: Partial<ApiClient>) {
-  const app = { client: { backupUrl: () => "/api/v1/backup", ...client } as ApiClient, formats: [], edgeKinds: [], refreshInbox: () => undefined };
+  const app = { client: { backupUrl: () => "/api/v1/backup", weeklyBackup: async () => weekly, ...client } as ApiClient, formats: [], edgeKinds: [], refreshInbox: () => undefined };
   return render(
     <MemoryRouter>
       <Ctx.Provider value={app}>
@@ -27,6 +27,8 @@ const view: RestoreView = {
     { id: "p2", title: "Cells", archived: false, sources: 1, outputs: 0, chats: 0, linkedFiles: 3, linkedFolder: "/Users/me/Notes" },
   ],
 };
+
+const weekly: WeeklyBackup = { on: false, keep: 4, folder: "/Users/me/Documents/Open Sourcebook/Backups", saving: false };
 
 const onThisComputer = () => vi.stubGlobal("fetch", async () => Response.json({ in: true, as: "browser" }));
 
@@ -95,5 +97,30 @@ describe("Settings › Backups", () => {
     await userEvent.click(await screen.findByRole("button", { name: "Cancel" }));
     expect(cancelled).toEqual(["r1"]);
     expect(screen.getByLabelText(/Choose a backup file/)).toBeInTheDocument();
+  });
+
+  it("backs up every week once turned on, into the library's Backups folder, keeping the newest few, and says the last one", async () => {
+    onThisComputer();
+    const asked: string[] = [];
+    show({
+      setWeeklyBackup: async (on: boolean) => (asked.push(`on ${on}`), { ...weekly, on, saving: on }),
+      keepBackups: async (keep: number) => (asked.push(`keep ${keep}`), { ...weekly, on: true, keep, last: "2026-11-26T08:00:00.000Z" }),
+    });
+    const toggle = await screen.findByRole("switch", { name: "Back up every week" });
+    expect(toggle).toHaveAttribute("aria-checked", "false");
+    expect(screen.getByText(weekly.folder)).toBeInTheDocument();
+    expect(screen.getByText("Last backup: none yet.")).toBeInTheDocument();
+    await userEvent.click(toggle);
+    expect(asked).toEqual(["on true"]);
+    expect(await screen.findByText("Backing up now…")).toBeInTheDocument();
+    await userEvent.selectOptions(screen.getByRole("combobox"), "8");
+    expect(asked).toEqual(["on true", "keep 8"]);
+    expect(await screen.findByText(/^Last backup: /)).toBeInTheDocument();
+  });
+
+  it("says a weekly backup that failed, in the launcher's words", async () => {
+    onThisComputer();
+    show({ weeklyBackup: async () => ({ ...weekly, on: true, failed: { at: "2026-11-26T08:00:00.000Z", message: "The engine did not answer." } }) });
+    expect(await screen.findByRole("alert")).toHaveTextContent("did not work: The engine did not answer.");
   });
 });

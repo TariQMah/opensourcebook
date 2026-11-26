@@ -11,3 +11,8 @@
 .bk-take { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--text); }
 .bk-ask { color: var(--text) !important; font-weight: 550; }
 .bk-done ul { margin: 4px 0 0; padding-left: 18px; font-size: 13px; }
+.bk-weekly { display: flex; align-items: center; justify-content: space-between; gap: var(--space-8); width: 100%; }
+.bk-weekly b { font-size: 14px; color: var(--text); }
+.bk-keep { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: 13px; color: var(--mutedText); }
+.bk-keep select { font: inherit; color: var(--text); }
+.sx-arow p code { overflow-wrap: anywhere; }

@@ -1234,6 +1234,22 @@ export interface PairedDevice {
 /** An install of a voice that runs on this computer, as the launcher runs it (cli/voice.ts). */
 export type VoiceInstallState = { voice: string } & ({ state: "idle" } | { state: "installing"; since: string } | { state: "done" } | { state: "failed"; message: string });
 
+/** The weekly backup into the library, as the launcher keeps it (cli/backups.ts). */
+export interface WeeklyBackup {
+  on: boolean;
+  /** How many backups are kept; older ones are deleted. */
+  keep: number;
+  /** When the last one was saved, and its file. */
+  last?: string;
+  file?: string;
+  /** The last try, when it failed after the last saved one. */
+  failed?: { at: string; message: string };
+  /** The folder they are saved in. */
+  folder: string;
+  /** One is being saved now. */
+  saving: boolean;
+}
+
 export interface PhoneStatus {
   /** Whether phones on the home network may open Open Sourcebook (once paired). */
   on: boolean;

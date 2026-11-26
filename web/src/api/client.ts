@@ -5,6 +5,7 @@ import type {
   Json,
   PhoneStatus,
   VoiceInstallState,
+  WeeklyBackup,
   AgentPick,
   AgentPickPatch,
   AgentStatus,
@@ -592,6 +593,17 @@ export class ApiClient {
   }
   unpairDevice(id: string): Promise<PhoneStatus> {
     return this.request("DELETE", `/phone/devices/${enc(id)}`);
+  }
+
+  // The weekly backup into the library, which the launcher saves (cli/backups.ts), through the proxy. Only this computer reaches it.
+  weeklyBackup(): Promise<WeeklyBackup> {
+    return this.request("GET", "/launcher/backups");
+  }
+  setWeeklyBackup(on: boolean): Promise<WeeklyBackup> {
+    return this.request("POST", `/launcher/backups/${on ? "on" : "off"}`);
+  }
+  keepBackups(keep: number): Promise<WeeklyBackup> {
+    return this.request("POST", `/launcher/backups/keep/${keep}`);
   }
 
   // A voice that runs on this computer, installed by the launcher (cli/voice.ts), through the proxy. Only this computer reaches it.

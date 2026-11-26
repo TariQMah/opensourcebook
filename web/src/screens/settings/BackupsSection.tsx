@@ -1,9 +1,12 @@
 import { useId, useRef, useState } from "react";
-import type { RestoreChoice, RestoreDone, RestoreProject, RestoreView } from "../../api/types";
+import { errorText } from "../../api/errors";
+import type { RestoreChoice, RestoreDone, RestoreProject, RestoreView, WeeklyBackup } from "../../api/types";
 import { useApi } from "../../app/context";
 import { Confirm } from "../../app/Confirm";
 import { ErrorNotice } from "../../app/Status";
 import { useThisComputer } from "../../app/thisComputer";
+import { useLoad } from "../../app/useLoad";
+import { Switch } from "../../design/ui";
 import { SectionHead } from "./SectionHead";
 import "./backups.css";
 
@@ -21,6 +24,66 @@ function plural(n: number, word: string): string {
 function holds(p: RestoreProject): string {
   const parts = [plural(p.sources, "source"), plural(p.chats, "chat"), `${p.outputs} made`];
   return `${parts.join(", ")}${p.archived ? ", archived" : ""}`;
+}
+
+/** How many backups the weekly one may keep, as offered here. */
+const KEEP_CHOICES = [1, 2, 3, 4, 6, 8, 12];
+
+/**
+ * The weekly backup: the launcher saves one into the library's Backups folder every week, keeping the newest few. Off
+ * until the person turns it on, since each holds every video made and goes into their own folder.
+ */
+function WeeklyRow() {
+  const client = useApi();
+  const weekly = useLoad(() => client.weeklyBackup(), [client]);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<unknown>();
+
+  async function change(work: () => Promise<WeeklyBackup>) {
+    setBusy(true);
+    setError(undefined);
+    try {
+      weekly.set(await work());
+    } catch (e) {
+      setError(e);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const w = weekly.data;
+  const keepChoices = w && !KEEP_CHOICES.includes(w.keep) ? [...KEEP_CHOICES, w.keep].sort((a, b) => a - b) : KEEP_CHOICES;
+  return (
+    <section className="sx-arow" aria-label="Every week">
+      <span className="bk-weekly">
+        <b>Back up every week</b>
+        {w && <Switch checked={w.on} label="Back up every week" disabled={busy} onChange={(on) => void change(() => client.setWeeklyBackup(on))} />}
+      </span>
+      {!w ? (
+        <p>{weekly.error !== undefined ? errorText(weekly.error) : "…"}</p>
+      ) : (
+        <>
+          <p>
+            Saves a backup in <code>{w.folder}</code> once a week while Open Sourcebook runs, and catches up when it starts. Each one holds every video you made, so it can be large.
+          </p>
+          <label className="bk-keep">
+            Keep the newest
+            <select value={w.keep} disabled={busy} onChange={(e) => void change(() => client.keepBackups(Number(e.target.value)))}>
+              {keepChoices.map((n) => (
+                <option key={n} value={n}>
+                  {n}
+                </option>
+              ))}
+            </select>
+            {w.keep === 1 ? "backup" : "backups"}; older ones are deleted.
+          </label>
+          <p>{w.saving ? "Backing up now…" : w.last ? `Last backup: ${new Date(w.last).toLocaleString()}.` : "Last backup: none yet."}</p>
+          {w.failed && <p role="alert">The last try, {new Date(w.failed.at).toLocaleString()}, did not work: {w.failed.message}</p>}
+        </>
+      )}
+      <ErrorNotice error={error} />
+    </section>
+  );
 }
 
 /**
@@ -111,6 +174,7 @@ export function BackupsSection() {
             <p>Only in the browser on the computer Open Sourcebook runs on.</p>
           )}
         </section>
+        {here && <WeeklyRow />}
         {here && (
           <section className="sx-arow" aria-label="Restore">
             <b>Restore from a backup</b>
