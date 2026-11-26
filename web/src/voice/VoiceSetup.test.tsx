@@ -153,3 +153,10 @@ test("a voice whose sample cannot be played says so under it, and the next press
     vi.unstubAllGlobals();
   }
 });
+
+test("a service with no key yet says the steps to getting one, in its own words", async () => {
+  const guided = { ...noKey, services: noKey.services.map((s) => (s.where === "hosted" ? { ...s, keySteps: ["Make an account.", "Paste the key here."] } : s)) };
+  renderWithEngine(<VoiceSetup />, { "GET /v1/voice": guided });
+  const steps = await screen.findByRole("list", { name: "How to get a Hosted A key" });
+  expect(within(steps).getAllByRole("listitem").map((li) => li.textContent)).toEqual(["Make an account.", "Paste the key here."]);
+});

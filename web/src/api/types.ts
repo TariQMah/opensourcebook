@@ -1128,6 +1128,8 @@ export interface VoiceServiceView {
   needsKey: boolean;
   keyLabel?: string;
   keyHelpUrl?: string;
+  /** The steps to getting a key, what it costs among them, in the service's own words. */
+  keySteps?: string[];
   keySet?: boolean;
   /** The key's last four characters. */
   keyHint?: string;

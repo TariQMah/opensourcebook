@@ -246,7 +246,16 @@ function KeyField({
 
 function KeyNote({ service: s }: { service: VoiceServiceView }) {
   return (
-    <p className="vs-d">
+    <>
+      {!s.keySet && s.keySteps?.length ? (
+        // How to get a key from a new account, in the service's own words.
+        <ol className="vs-steps" aria-label={`How to get a ${s.label} key`}>
+          {s.keySteps.map((step) => (
+            <li key={step}>{step}</li>
+          ))}
+        </ol>
+      ) : null}
+      <p className="vs-d">
       Kept on this computer only, in the scenes service's settings.
       {s.keyHelpUrl && (
         <>
@@ -256,7 +265,8 @@ function KeyNote({ service: s }: { service: VoiceServiceView }) {
           </a>
         </>
       )}
-    </p>
+      </p>
+    </>
   );
 }
 
