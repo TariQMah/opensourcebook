@@ -68,6 +68,7 @@ Audio was the first shape added after the registry was built, and these are the 
 | Change how flashcards or a quiz are made or checked | `engine/src/engines/flashcards/`, `engine/src/engines/quiz/`, `engine/src/cards/` |
 | Change how a video is drawn | `services/scenes/engine/` |
 | Change what the video agent knows | `services/scenes/skills/` |
+| Change what a video's job folder holds (its note, sources, what was read from them) | `services/scenes/src/folder.ts`, and [`docs/JOB-FOLDER.md`](JOB-FOLDER.md) first |
 | Change what the planner knows (who Open Sourcebook is for, how big a plan is, how to write a brief) | `skills/planner/` |
 | Change what an agent may do on the computer | `services/agent-connector/src/box.ts` |
 | Add a command | `cli/commands/` |
