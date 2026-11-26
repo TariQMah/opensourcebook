@@ -13,7 +13,7 @@ Open Sourcebook runs on your own computer as four small programs. One command at
 | `services/agent-connector/` | Runs your own agent (Claude Code, Codex, OpenCode, Antigravity, Cursor, GitHub Copilot) for a chat turn or a piece of work, and hands it Open Sourcebook's tools | the engine, the scenes service |
 | `services/scenes/` | Makes drawn videos (the scene language, the pieces, the styles, the render of the file) and voices audio; the voice and the sound are shared by both | the connector, the engine |
 
-`ios/` is the iPhone app. `docs/` is the documents. `cli/` is the launcher and the `opensourcebook` command, and the door a paired phone opens the web app through (`cli/door.ts`): the only part of Open Sourcebook that listens beyond this computer, and only when the person turns the phone on.
+`ios/` is the iPhone app. `desktop/` is the desktop app: the web app in its own window, which starts and stops the four programs and keeps them up to date, with the programs and the person's data in the app data folder (`desktop/README.md`). `docs/` is the documents. `cli/` is the launcher and the `opensourcebook` command, and the door a paired phone opens the web app through (`cli/door.ts`): the only part of Open Sourcebook that listens beyond this computer, and only when the person turns the phone on.
 
 ## The six things you can add
 
