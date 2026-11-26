@@ -23,6 +23,9 @@
  *   POST   /launcher/agents/:id/install       installs an agent from its npm package
  *   POST   /launcher/agents/:id/sign-in       starts the agent's own sign-in and watches it
  *   POST   /launcher/tools/ffmpeg             fetches ffmpeg
+ *   GET    /launcher/backups                  the weekly backup: on or off, how many are kept, the last one (cli/backups.ts)
+ *   POST   /launcher/backups/on|off           turns it on (backing up now when one is due) or off
+ *   POST   /launcher/backups/keep/:n          keeps the newest n
  *
  * The same control server lets this computer's browser in (opener.ts): the web app's proxy asks it whether a code
  * someone opened is one the launcher made, and `opensourcebook open` asks it for a new code.
@@ -39,6 +42,7 @@ import type { Device } from "./devices.ts";
 import { DeviceStore } from "./devices.ts";
 import { openDoor, type Door } from "./door.ts";
 import type { OpenCodes, RunKeys } from "./opener.ts";
+import { keepOf, MAX_KEEP, type BackupSchedule } from "./backups.ts";
 import type { SetupActions } from "./setup.ts";
 import type { VoiceInstalls } from "./voice.ts";
 import { PairingCodes } from "./pairing.ts";
@@ -104,6 +108,8 @@ export interface PhoneOptions {
   voices?: VoiceInstalls;
   /** What Get set up's buttons ask for: installing and signing in to an agent, fetching ffmpeg (cli/setup.ts). */
   setup?: SetupActions;
+  /** The weekly backup into the library (cli/backups.ts), which Settings › Backups turns on and off. */
+  backups?: BackupSchedule;
   /** Opens a fresh opening address for `to` in this computer's browser, for a tab left from an earlier run (OpenGate). */
   reopen?: (to: string) => boolean;
 }
@@ -305,6 +311,16 @@ export class Phone {
         const id = agent[1]!;
         if (!(await setup.has(id))) return reply(404, { error: "not_found", message: `"${id}" is not an agent Open Sourcebook knows.` });
         return reply(202, { agent: id, ...(agent[2] === "install" ? await setup.install(id) : await setup.signIn(id)) });
+      }
+      // The weekly backup: its setting and the last one, and turning it on or off.
+      const backups = this.o.backups;
+      if (backups && path === "/launcher/backups" && req.method === "GET") return reply(200, backups.view());
+      const backup = /^\/launcher\/backups\/(on|off|keep\/(\d{1,3}))$/.exec(path);
+      if (backups && backup && req.method === "POST") {
+        if (backup[2] === undefined) return reply(200, backups.set({ on: backup[1] === "on" }));
+        const keep = keepOf(backup[2]);
+        if (keep === undefined) return reply(400, { error: "bad_request", message: `Keep from 1 to ${MAX_KEEP} backups.` });
+        return reply(200, backups.set({ keep }));
       }
       const device = /^\/phone\/devices\/([0-9a-f]{1,32})$/.exec(path);
       if (req.method === "DELETE" && device) {

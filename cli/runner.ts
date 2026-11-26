@@ -10,6 +10,7 @@ import { join } from "node:path";
 import { launchArgs } from "./build.ts";
 import { releasePorts } from "./ports.ts";
 import { OpenCodes, openAddress } from "./opener.ts";
+import { BackupSchedule } from "./backups.ts";
 import { LocalFiles } from "./local-files.ts";
 import { VoiceInstalls } from "./voice.ts";
 import { SetupActions, useOwnBins } from "./setup.ts";
@@ -85,6 +86,7 @@ export async function run(w: Wiring, options: RunOptions, programs: Program[] = 
 
   let phone: Phone | undefined;
   let files: LocalFiles | undefined;
+  let backups: BackupSchedule | undefined;
   const openCodes = new OpenCodes();
   let stopping = false;
   const stop = async (code: number, why: string) => {
@@ -92,6 +94,7 @@ export async function run(w: Wiring, options: RunOptions, programs: Program[] = 
     stopping = true;
     note(`Stopping Open Sourcebook: ${why}`);
     setup.stop();
+    backups?.stop();
     await phone?.stop();
     await files?.stop();
     await stopAll(started);
@@ -237,8 +240,13 @@ export async function run(w: Wiring, options: RunOptions, programs: Program[] = 
   say(`Open Sourcebook is running at ${frontUrl}`);
   if (options.phone !== undefined) rememberPhone(w.home, options.phone);
   const ansi = Boolean(process.stdout.isTTY) && !process.env.CI;
+  // The weekly backup into the library, when the person turned it on (cli/backups.ts); a catch-up a little after the start.
+  if (w.ports.engine && w.secrets.OPENSOURCEBOOK_CLIENT_TOKEN) {
+    backups = new BackupSchedule({ state: w.home, engine: url(w, "engine"), token: w.secrets.OPENSOURCEBOOK_CLIENT_TOKEN, say: note });
+    backups.start();
+  }
   if (w.ports.phone && w.ports["phone-control"] && w.ports.web) {
-    phone = new Phone({ home: w.home, webPort: w.ports.web, doorPort: w.ports.phone, controlPort: w.ports["phone-control"], token: w.secrets.PHONE_TOKEN, say, ansi, openCodes, voices: new VoiceInstalls({ root: w.root, home: w.home }), setup, reopen: (to) => openInBrowser(openAddress(frontUrl, openCodes.issue().code, to)), ...(w.keys ? { keys: w.keys } : {}) });
+    phone = new Phone({ home: w.home, webPort: w.ports.web, doorPort: w.ports.phone, controlPort: w.ports["phone-control"], token: w.secrets.PHONE_TOKEN, say, ansi, openCodes, voices: new VoiceInstalls({ root: w.root, home: w.home }), setup, ...(backups ? { backups } : {}), reopen: (to) => openInBrowser(openAddress(frontUrl, openCodes.issue().code, to)), ...(w.keys ? { keys: w.keys } : {}) });
     try {
       await phone.start(options.phone ?? phoneChoice(w.home));
     } catch (error) {

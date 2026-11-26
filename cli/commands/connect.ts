@@ -46,13 +46,19 @@ export interface CallOptions {
 
 /** Connects to the running Open Sourcebook, or says plainly that it is not running and how to start it. */
 export function connect(ctx: Pick<Ctx, "home">): Engine {
+  const { base, web, token } = runningEngine(ctx);
+  return engineAt(base, web, token);
+}
+
+/** Where the running Open Sourcebook's engine is and its client token, for a command that reads an answer as it comes (a backup). */
+export function runningEngine(ctx: Pick<Ctx, "home">): { base: string; web: string; token: string } {
   const running = findRunning(ctx.home);
   if (!running) throw new Problem("not_running", `Open Sourcebook is not running. ${START_HINT}`);
   const secrets = readSecrets(join(ctx.home, "secrets.json"));
   if (!secrets?.OPENSOURCEBOOK_CLIENT_TOKEN) throw new Problem("not_running", "Open Sourcebook is running but its secrets file is gone; stop it with \"opensourcebook stop\" and start it again.");
   const port = running.ports.engine;
   if (!port) throw new Problem("not_running", "Open Sourcebook is running but did not say where its engine is; stop it with \"opensourcebook stop\" and start it again.");
-  return engineAt(`http://127.0.0.1:${port}`, running.url, secrets.OPENSOURCEBOOK_CLIENT_TOKEN);
+  return { base: `http://127.0.0.1:${port}`, web: running.url, token: secrets.OPENSOURCEBOOK_CLIENT_TOKEN };
 }
 
 /** How long a call waits for the engine's answer. Adding or retrying a large source is read while the call waits. */
