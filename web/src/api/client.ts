@@ -64,6 +64,9 @@ import type {
   SetupState,
   UploadType,
   ProjectGroup,
+  RestoreChoice,
+  RestoreDone,
+  RestoreView,
 } from "./types";
 
 type Query = Record<string, string | number | undefined>;
@@ -238,6 +241,23 @@ export class ApiClient {
   /** Moves a project into a folder on Home, or back on Home with `null`. */
   async moveProject(id: string, groupId: string | null): Promise<Project> {
     return (await this.request<{ project: Project }>("PATCH", `/v1/projects/${enc(id)}`, { json: { groupId } })).project;
+  }
+
+  // Backups (only the browser on this computer)
+  /** Where the browser downloads a backup of every project. */
+  backupUrl(): string {
+    return `${this.baseUrl}/v1/backup`;
+  }
+  /** Sends a backup file to be restored; answers what is in it, before anything is written. */
+  async startRestore(file: Blob): Promise<RestoreView> {
+    return (await this.request<{ restore: RestoreView }>("POST", "/v1/backup/restores", { body: file, headers: { "content-type": "application/zip" } })).restore;
+  }
+  /** Restores, with a choice for every project that is here already. */
+  finishRestore(id: string, choices: Record<string, RestoreChoice>): Promise<RestoreDone> {
+    return this.request("POST", `/v1/backup/restores/${enc(id)}`, { json: { choices } });
+  }
+  async cancelRestore(id: string): Promise<void> {
+    await this.request("DELETE", `/v1/backup/restores/${enc(id)}`);
   }
 
   /** Deletes a project for good, with everything in it; `409 project_busy` while a plan in it runs. */

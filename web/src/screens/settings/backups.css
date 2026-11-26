@@ -1,0 +1,13 @@
+/* Settings › Backups: the restore list, one project a row with its choice at the right. */
+.bk-pick { cursor: pointer; }
+.bk-pick.is-busy { opacity: .7; cursor: progress; }
+.bk-restore { display: flex; flex-direction: column; gap: var(--space-8); width: 100%; }
+.bk-list { list-style: none; margin: 0; padding: 0; width: 100%; }
+.bk-list li { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-8); padding: 10px 0; border-top: 1px solid var(--border); }
+.bk-name { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1 1 220px; }
+.bk-name b { color: var(--text); font-size: 14px; overflow-wrap: anywhere; }
+.bk-name span { color: var(--mutedText); font-size: 13px; line-height: 19px; }
+.bk-name .bk-here { color: var(--text); }
+.bk-take { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--text); }
+.bk-ask { color: var(--text) !important; font-weight: 550; }
+.bk-done ul { margin: 4px 0 0; padding-left: 18px; font-size: 13px; }

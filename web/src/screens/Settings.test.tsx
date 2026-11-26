@@ -9,7 +9,7 @@ const sectionNav = () => screen.findByRole("navigation", { name: "Settings secti
 test("one page with its sections on the left, What makes what first, and no spend anywhere", async () => {
   renderApp("/settings", redesignRoutes);
   const nav = await sectionNav();
-  expect(within(nav).getAllByRole("link").map((a) => a.textContent)).toEqual(["What makes what", "Providers", "Voice", "Library", "Phone", "Reminders", "Appearance", "Advanced"]);
+  expect(within(nav).getAllByRole("link").map((a) => a.textContent)).toEqual(["What makes what", "Providers", "Voice", "Library", "Backups", "Phone", "Reminders", "Appearance", "Advanced"]);
   expect(within(nav).getByRole("link", { name: "What makes what" })).toHaveAttribute("aria-current", "page");
   expect(await screen.findByRole("region", { name: "What makes what" })).toBeInTheDocument();
   expect(document.body.textContent).not.toMatch(/\$\d/);
@@ -55,6 +55,7 @@ describe("on a phone", () => {
       "Providers2 ready",
       "VoiceHosted A",
       "Library",
+      "Backups",
       expect.stringMatching(/^Phone/),
       expect.stringMatching(/^Reminders/),
       expect.stringMatching(/^Appearance/),

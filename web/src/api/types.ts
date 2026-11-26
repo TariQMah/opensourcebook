@@ -125,6 +125,33 @@ export interface ProjectGroup {
   updatedAt: string;
 }
 
+/** A backup file sent to be restored, before the person chooses (engine/docs/api.md, "Backing up every project"). */
+export interface RestoreView {
+  id: string;
+  madeAt: string;
+  projects: RestoreProject[];
+}
+
+export interface RestoreProject {
+  id: string;
+  title: string;
+  archived: boolean;
+  sources: number;
+  outputs: number;
+  chats: number;
+  linkedFolder?: string;
+  linkedFiles: number;
+  /** A project with this id is here already; restoring it needs a choice. */
+  here?: { title: string };
+}
+
+export type RestoreChoice = "keep-both" | "replace" | "skip";
+
+export interface RestoreDone {
+  restored: Array<{ from: string; projectId: string; title: string; as: "added" | "copy" | "replaced" }>;
+  skipped: Array<{ from: string; title: string }>;
+}
+
 /** What one look at a linked folder found, by each file's path from the folder (engine/docs/api.md). */
 export interface FolderCheck {
   folder: string;
