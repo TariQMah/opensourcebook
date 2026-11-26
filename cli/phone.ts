@@ -30,6 +30,7 @@ import type { Device } from "./devices.ts";
 import { DeviceStore } from "./devices.ts";
 import { openDoor, type Door } from "./door.ts";
 import type { OpenCodes, RunKeys } from "./opener.ts";
+import type { VoiceInstalls } from "./voice.ts";
 import { PairingCodes } from "./pairing.ts";
 import { encodeQr, svgQr, terminalQr } from "./qr.ts";
 import { writePrivate } from "./secrets.ts";
@@ -89,6 +90,8 @@ export interface PhoneOptions {
   keys?: RunKeys;
   /** The one-time codes that let this computer's browser in. */
   openCodes?: OpenCodes;
+  /** The installs of voices that run on this computer, which the voice screen's button starts (cli/voice.ts). */
+  voices?: VoiceInstalls;
 }
 
 export interface PhoneStatus {
@@ -252,6 +255,15 @@ export class Phone {
           return reply(400, { error: "bad_request", message: "Send the code as JSON." });
         }
         return opener.redeem(code) ? reply(200, { ok: true }) : reply(403, { error: "wrong_code", message: "That address was used or has run out." });
+      }
+      // A voice that runs on this computer, installed from the voice screen: its state, and a start.
+      const voice = /^\/launcher\/voices\/([a-z0-9-]{1,40})(\/install)?$/.exec(path);
+      const voices = this.o.voices;
+      if (voice && voices) {
+        const id = voice[1]!;
+        if (!voices.has(id)) return reply(404, { error: "not_found", message: `"${id}" is not a voice that runs on this computer.` });
+        if (req.method === "GET" && !voice[2]) return reply(200, { voice: id, ...voices.state(id) });
+        if (req.method === "POST" && voice[2]) return reply(202, { voice: id, ...voices.start(id) });
       }
       const device = /^\/phone\/devices\/([0-9a-f]{1,32})$/.exec(path);
       if (req.method === "DELETE" && device) {

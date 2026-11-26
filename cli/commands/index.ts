@@ -19,10 +19,11 @@ import { run } from "./run.ts";
 import { skills } from "./skills.ts";
 import { sources } from "./sources.ts";
 import { update } from "./update.ts";
+import { voice } from "./voice.ts";
 import { rememberProject } from "./connect.ts";
 import { Problem, describeAll, flagString, helpAll, helpCommand, helpGroup, parse, type Command, type Ctx, type Group } from "./table.ts";
 
-export const GROUPS: Group[] = [run, projects, sources, chats, make, plans, items, quiz, cards, makers, picks, styles, agents, packs, skills, devices, update];
+export const GROUPS: Group[] = [run, projects, sources, chats, make, plans, items, quiz, cards, makers, picks, styles, agents, packs, skills, devices, voice, update];
 
 export interface Io {
   stdout(text: string): void;
