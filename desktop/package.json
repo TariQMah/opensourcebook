@@ -1,0 +1,30 @@
+{
+  "name": "opensourcebook-desktop",
+  "productName": "Open Sourcebook",
+  "version": "0.2.0",
+  "private": true,
+  "license": "MIT",
+  "type": "module",
+  "description": "Open Sourcebook in its own window: starts the four programs when it opens, stops them when it quits, and keeps them up to date.",
+  "main": "dist/main.js",
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "resources": "node scripts/resources.ts",
+    "start": "npm run build && electron .",
+    "package": "node scripts/package.ts",
+    "test": "node --test test/*.test.ts",
+    "typecheck": "tsc --noEmit -p ."
+  },
+  "engines": {
+    "node": ">=24"
+  },
+  "devDependencies": {
+    "@electron/packager": "20.3.0",
+    "@types/node": "24.19.4",
+    "electron": "45.5.0",
+    "typescript": "5.9.3"
+  },
+  "opensourcebook": {
+    "releases": "Mikiyas-Meles-Assefa/opensourcebook"
+  }
+}
