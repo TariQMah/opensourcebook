@@ -216,6 +216,8 @@ export interface VoiceServiceView {
   needsKey: boolean;
   keyLabel?: string;
   keyHelpUrl?: string;
+  /** The steps to getting a key, in the service's own words. */
+  keySteps?: string[];
   keySet?: boolean;
   keyHint?: string;
   installed?: boolean;
@@ -464,6 +466,8 @@ function readServiceView(value: unknown): VoiceServiceView | undefined {
         : undefined
     : undefined;
   const hint = text(value.keyHint);
+  // A few short plain sentences at most.
+  const keySteps = Array.isArray(value.keySteps) ? value.keySteps.flatMap((step) => (typeof step === "string" && step.trim() && step.length <= 400 ? [step.trim()] : [])).slice(0, 8) : [];
   return {
     id: text(value.id)!,
     label: text(value.label)!,
@@ -472,6 +476,7 @@ function readServiceView(value: unknown): VoiceServiceView | undefined {
     needsKey: value.needsKey === true,
     ...(text(value.keyLabel) ? { keyLabel: text(value.keyLabel)! } : {}),
     ...(text(value.keyHelpUrl) && /^https:\/\//.test(text(value.keyHelpUrl)!) ? { keyHelpUrl: text(value.keyHelpUrl)! } : {}),
+    ...(keySteps.length ? { keySteps } : {}),
     ...(typeof value.keySet === "boolean" ? { keySet: value.keySet } : {}),
     // Four characters at most, whatever was sent: the browser never sees more of a key.
     ...(hint && hint.length <= 4 ? { keyHint: hint } : {}),

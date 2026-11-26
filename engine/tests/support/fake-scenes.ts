@@ -197,7 +197,7 @@ export class FakeScenesService {
   private voiceView(): Record<string, unknown> {
     const key = this.voiceSetup.keys.acme;
     const services = [
-      { id: "acme", label: "Acme", where: "hosted", about: "A hosted voice.", needsKey: true, keyLabel: "Your Acme key", keyHelpUrl: "https://acme.example/keys", keySet: !!key, ...(key ? { keyHint: this.options.leakKeys ? key : key.slice(-4) } : {}), ...(key && this.options.leakKeys ? { key } : {}), listsVoices: true, samples: true },
+      { id: "acme", label: "Acme", where: "hosted", about: "A hosted voice.", needsKey: true, keyLabel: "Your Acme key", keyHelpUrl: "https://acme.example/keys", keySteps: ["Make an account.", 7, "Paste the key here."], keySet: !!key, ...(key ? { keyHint: this.options.leakKeys ? key : key.slice(-4) } : {}), ...(key && this.options.leakKeys ? { key } : {}), listsVoices: true, samples: true },
       { id: "home", label: "On this computer", where: "local", about: "A voice here.", needsKey: false, installed: false, install: { command: "npm run voice:home", folder: "services/scenes" }, listsVoices: false, samples: false },
     ];
     return { ...(this.voiceSetup.service ? { service: this.voiceSetup.service } : {}), ...(this.voiceSetup.voice ? { voice: { id: this.voiceSetup.voice, label: "Vee" } } : {}), from: this.voiceSetup.service ? "app" : "none", services };

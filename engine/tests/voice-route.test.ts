@@ -35,7 +35,7 @@ describe("the voice routes", () => {
     const { call, scenes } = setup({ leakKeys: true });
     const first = await call("/v1/voice");
     expect(first.response.status).toBe(200);
-    expect(first.body).toMatchObject({ from: "none", services: [{ id: "acme", needsKey: true, keySet: false, listsVoices: true, samples: true }, { id: "home", where: "local", samples: false, installed: false, install: { command: "npm run voice:home", folder: "services/scenes" } }] });
+    expect(first.body).toMatchObject({ from: "none", services: [{ id: "acme", needsKey: true, keySet: false, keySteps: ["Make an account.", "Paste the key here."], listsVoices: true, samples: true }, { id: "home", where: "local", samples: false, installed: false, install: { command: "npm run voice:home", folder: "services/scenes" } }] });
 
     const put = await call("/v1/voice/services/acme/key", { method: "PUT", body: { key: KEY } });
     expect(put.response.status).toBe(200);
