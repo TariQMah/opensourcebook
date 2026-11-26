@@ -1,10 +1,11 @@
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ApiClient } from "../api/client";
 import type { FormatDescriptor, Item, PlanView } from "../api/types";
 import { Ctx } from "../app/context";
+import { forgetThisComputer } from "../app/thisComputer";
 import { PlanCard } from "./PlanCard";
 import { PlanContext } from "./PlanContext";
 import { openStage, plannedLine, sizeText, buildStages } from "./planModel";
@@ -113,6 +114,47 @@ describe("the plan card", () => {
       </MemoryRouter>,
     );
     expect(screen.getByText(STEP)).toBeInTheDocument();
+  });
+
+  describe("Show job files", () => {
+    afterEach(() => {
+      vi.unstubAllGlobals();
+      forgetThisComputer();
+    });
+    const running = (files: boolean) => item("a", 1, "video", { status: "running", job: { id: "j1", status: "running", stage: "writing", progress: 0.2, attempt: 1, step: "Writing", ...(files ? { files: true } : {}) } as Item["job"] });
+    const renderWith = (it: Item, client: Partial<ApiClient>) => {
+      const app = { client: client as ApiClient, formats, edgeKinds: [], refreshInbox: () => undefined };
+      const started = { ...view([it]), plan: { ...view([it]).plan, status: "running", kickedOffAt: "2026-11-19T13:00:00.000Z" } as PlanView["plan"] };
+      return render(
+        <MemoryRouter>
+          <Ctx.Provider value={app}>
+            <PlanContext.Provider value={{ view: started, formats, sources: [], editable: false, edit: async () => true, act: async () => true, busy: false }}>
+              <PlanCard />
+            </PlanContext.Provider>
+          </Ctx.Provider>
+        </MemoryRouter>,
+      );
+    };
+
+    it("opens a video job's folder from its row, in the browser on this computer", async () => {
+      vi.stubGlobal("fetch", async () => Response.json({ in: true, as: "browser" }));
+      const shown: string[] = [];
+      renderWith(running(true), { showJobFiles: async (id: string) => (shown.push(id), { shown: true as const }) });
+      await userEvent.click(await screen.findByRole("button", { name: "Show job files" }));
+      expect(shown).toEqual(["j1"]);
+    });
+
+    it("is not offered on a paired phone, nor for a job with no folder", async () => {
+      vi.stubGlobal("fetch", async () => Response.json({ in: true, as: "device" }));
+      renderWith(running(true), {});
+      await new Promise((r) => setTimeout(r, 20));
+      expect(screen.queryByRole("button", { name: "Show job files" })).toBeNull();
+      forgetThisComputer();
+      vi.stubGlobal("fetch", async () => Response.json({ in: true, as: "browser" }));
+      renderWith(running(false), {});
+      await new Promise((r) => setTimeout(r, 20));
+      expect(screen.queryByRole("button", { name: "Show job files" })).toBeNull();
+    });
   });
 
   it("a video that will have no sound says so quietly on its row, with what to do, until it is made", () => {

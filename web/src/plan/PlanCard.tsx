@@ -8,6 +8,7 @@ import { FormatTile } from "../design/FormatTile";
 import { lookFor } from "../design/formatLook";
 import { Icon } from "../design/Icon";
 import { AddItem, ItemDetails } from "./ItemForm";
+import { JobFiles } from "./JobFiles";
 import { itemKey } from "./itemDraft";
 import { usePlan } from "./PlanContext";
 import { buildStages, canEditItems, conditionText, FOLD_ITEMS, formatWords, partsOf, isFinished, playLabel, issueFix, newStageLevel, openStage, plannedLine, rowState, runningFor, sizeText, splitIssues, stageName, timeLeft, underwayText, type Row, type StageGroup } from "./planModel";
@@ -499,6 +500,7 @@ function ItemRow({ row, selected, onSelect, onPlay }: { row: Row; selected: bool
           )}
         </div>
       )}
+      {started && item.job?.files && <JobFiles jobId={item.job.id} />}
       {failed && (
         <div className="itnote fail" role="status">
           <span>{item.errorMessage ?? "It could not be made."}</span>

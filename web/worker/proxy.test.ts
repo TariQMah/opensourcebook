@@ -182,6 +182,19 @@ describe("who may use the engine through this proxy", () => {
     expect(calls).toHaveLength(1);
   });
 
+  test("a job's files open only for this computer's browser: the door is refused, however the path is spelled", async () => {
+    const { calls, fetchImpl } = engine(200, { shown: true });
+    const door = { "x-opensourcebook-door": "door-key-of-this-run" };
+    for (const path of ["/api/v1/jobs/j1/files/show", "/api/v1/jobs/j1/FILES/show", "/api/v1/jobs/j1/files%2Fshow", "/api/v1/jobs/j1/files/show/"]) {
+      const res = await proxy(new Request(`${at}${path}`, { method: "POST", headers: { ...door, ...browser } }), run, fetchImpl);
+      expect(res.status).toBe(403);
+    }
+    expect(calls).toHaveLength(0);
+    const res = await proxy(new Request(`${at}/api/v1/jobs/j1/files/show`, { method: "POST", headers: { ...browser, origin: at } }), run, fetchImpl);
+    expect(res.status).toBe(200);
+    expect(calls.map((c) => c.url)).toEqual(["http://engine.test/v1/jobs/j1/files/show"]);
+  });
+
   test("the launcher's own check holds the engine token and reaches the engine, not the phone", async () => {
     const { fetchImpl } = engine();
     const tool = { authorization: "Bearer secret-token" };

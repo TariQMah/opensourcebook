@@ -155,6 +155,8 @@ export async function proxy(
     return phone(request, url, env, fetchImpl);
   }
   if (!url.pathname.startsWith(PREFIX + "v1/")) return error(404, "not_found", "No such route.");
+  // Opening a folder in the file manager is for the person at this computer, never a paired phone.
+  if (who !== "browser" && opensFiles(url.pathname)) return error(403, "this_computer_only", "A job's files open only in the browser on the computer Open Sourcebook runs on.");
   if (!METHODS.has(request.method)) return error(405, "method_not_allowed", "Method not allowed.");
   if (request.method !== "GET" && request.method !== "HEAD" && crossSite(request, url)) {
     return error(403, "cross_site", "Requests must come from this site.");
@@ -190,6 +192,17 @@ export async function proxy(
     if (value !== null) out.set(name, value);
   }
   return new Response(upstream.body, { status: upstream.status, headers: out });
+}
+
+/** Whether a path asks the engine to open a folder on this computer (`POST /v1/jobs/:id/files/show`), however it is spelled. */
+function opensFiles(path: string): boolean {
+  let plain = path;
+  try {
+    plain = decodeURIComponent(path);
+  } catch {
+    // A path that does not decode is judged as it is.
+  }
+  return /\/files\/show/i.test(plain);
 }
 
 /** Where `/api/open` goes once the browser is in: a path of this app, never another site. */

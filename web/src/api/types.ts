@@ -454,6 +454,8 @@ export interface ItemJob {
    * while it waits or after it was given up on: a button labelled `label`, sent back as `retryItem(..., id)`.
    */
   choice?: { id: string; label: string };
+  /** It works in a folder on this computer the person can open ("Show job files"). */
+  files?: boolean;
 }
 
 export interface ItemWaiting {

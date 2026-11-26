@@ -485,6 +485,10 @@ export class ApiClient {
   remakeScene(outputId: string, scene: string, input: RemakeInput = {}): Promise<RemakeStarted> {
     return this.request("POST", `/v1/outputs/${enc(outputId)}/scenes/${enc(scene)}/remake`, { json: input });
   }
+  /** Opens the folder a job works in, in this computer's file manager (a video's job folder); refused on a paired phone. */
+  showJobFiles(id: string): Promise<{ shown: true }> {
+    return this.request("POST", `/v1/jobs/${enc(id)}/files/show`);
+  }
   /** Stops a job that is not an item's own (a scene being made again). */
   cancelJob(id: string): Promise<{ job: { id: string; status: string } }> {
     return this.request("POST", `/v1/jobs/${enc(id)}/cancel`);
