@@ -45,7 +45,8 @@ export function installVoice(root: string, id: string, log: string, options: { e
   const dir = join(voicesFolder(root), id);
   mkdirSync(dirname(log), { recursive: true });
   const out = createWriteStream(log, { flags: "w" });
-  const args = existsSync(join(dir, "package-lock.json")) ? ["ci", "--no-audit", "--no-fund"] : ["install", "--no-audit", "--no-fund"];
+  // Its scripts' output in the foreground too, so how far a model download is (`progressOf`) comes through.
+  const args = [...(existsSync(join(dir, "package-lock.json")) ? ["ci"] : ["install"]), "--no-audit", "--no-fund", "--foreground-scripts"];
   const npm = options.npm ?? (process.platform === "win32" ? "npm.cmd" : "npm");
   return new Promise((resolve) => {
     const child = spawn(npm, args, { cwd: dir, env: withOwnNode(options.env ?? process.env), stdio: ["ignore", "pipe", "pipe"], shell: process.platform === "win32", windowsHide: true });
@@ -70,8 +71,32 @@ export function installVoice(root: string, id: string, log: string, options: { e
   });
 }
 
-/** What the voice screen's button sees of an install the launcher runs: one at a time per voice. */
-export type InstallState = { state: "idle" } | { state: "installing"; since: string } | { state: "done" } | { state: "failed"; message: string };
+/**
+ * How far a download a voice's own install script is making has got, from a line it printed: `progress
+ * {"loaded":n,"total":n}`, in bytes (voices/kokoro/fetch-model.mjs prints them). Any other line is not one.
+ */
+export function progressOf(line: string): { loaded: number; total: number } | undefined {
+  const m = /^progress (\{.*\})$/.exec(line.trim());
+  if (!m) return undefined;
+  try {
+    const { loaded, total } = JSON.parse(m[1]!) as { loaded?: unknown; total?: unknown };
+    if (typeof loaded !== "number" || typeof total !== "number" || !(total > 0) || loaded < 0) return undefined;
+    return { loaded: Math.min(loaded, total), total };
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * What a button sees of an install the launcher runs: one at a time per voice or agent. While a voice installs, `step`
+ * says which part it is in: `package`, npm getting its code, then `download`, its model fetched, with how many bytes of
+ * how many so far.
+ */
+export type InstallState =
+  | { state: "idle" }
+  | { state: "installing"; since: string; step?: "package" | "download"; loaded?: number; total?: number }
+  | { state: "done" }
+  | { state: "failed"; message: string };
 
 /** The installs the launcher runs for the voice screen, one per voice at a time. */
 export class VoiceInstalls {
@@ -94,10 +119,15 @@ export class VoiceInstalls {
   start(id: string): InstallState {
     const now = this.state(id);
     if (now.state === "installing") return now;
-    const started: InstallState = { state: "installing", since: new Date().toISOString() };
+    const since = new Date().toISOString();
+    const started: InstallState = { state: "installing", since, step: "package" };
     this.states.set(id, started);
     const log = join(this.o.home, "logs", `voice-${id}.log`);
-    installVoice(this.o.root, id, log, { ...(this.o.env ? { env: this.o.env } : {}), ...(this.o.npm ? { npm: this.o.npm } : {}) })
+    const onLine = (line: string) => {
+      const p = progressOf(line);
+      if (p && this.states.get(id)?.state === "installing") this.states.set(id, { state: "installing", since, step: "download", ...p });
+    };
+    installVoice(this.o.root, id, log, { onLine, ...(this.o.env ? { env: this.o.env } : {}), ...(this.o.npm ? { npm: this.o.npm } : {}) })
       .then((r) => this.states.set(id, r.ok ? { state: "done" } : { state: "failed", message: `It did not finish. What it said is in ${r.log}.` }))
       .catch((error: unknown) => this.states.set(id, { state: "failed", message: error instanceof Error ? error.message : String(error) }));
     return started;

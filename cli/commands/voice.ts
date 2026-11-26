@@ -4,7 +4,7 @@
  * one sees the voice at its next check (Settings > Voice).
  */
 import { join } from "node:path";
-import { installVoice, localVoices } from "../voice.ts";
+import { installVoice, localVoices, progressOf } from "../voice.ts";
 import { Problem, type Group } from "./table.ts";
 
 export const voice: Group = {
@@ -27,11 +27,12 @@ export const voice: Group = {
         let last = 0;
         const result = await installVoice(ctx.root, id, join(ctx.home, "logs", `voice-${id}.log`), {
           env: ctx.env,
-          // A sign of life now and then, not npm's every line.
-          onLine: () => {
+          // A sign of life now and then, not npm's every line: how far the download is once there is one.
+          onLine: (line) => {
             if (Date.now() - last < 15_000) return;
             last = Date.now();
-            ctx.progress("Still installing...");
+            const p = progressOf(line);
+            ctx.progress(p ? `Downloading the model: ${Math.round(p.loaded / 1e6)} of ${Math.round(p.total / 1e6)} MB...` : "Still installing...");
           },
         });
         if (!result.ok) throw new Problem("install_failed", `${id} did not finish installing. What it said is in ${result.log}. Run this again to try once more.`);

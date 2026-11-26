@@ -6,7 +6,7 @@ import { dirname, join } from "node:path";
 import { test } from "node:test";
 import { runCommand } from "../commands/index.ts";
 import { Phone } from "../phone.ts";
-import { VoiceInstalls, installVoice, localVoices, withOwnNode } from "../voice.ts";
+import { VoiceInstalls, installVoice, localVoices, progressOf, withOwnNode } from "../voice.ts";
 
 /** A copy of Open Sourcebook with two voice folders (one without a package.json) and an npm that says what it was run with. */
 function copy(npmExit = 0) {
@@ -46,7 +46,7 @@ test("a voice is installed in its own folder, npm's words in the log; one that f
     const done = await installVoice(c.root, "calm", log, { npm: c.npm, env: { PATH: "/usr/bin:/bin" } });
     assert.deepEqual(done, { ok: true, log });
     const said = readFileSync(log, "utf8");
-    assert.match(said, /^npm ci --no-audit --no-fund|^npm install --no-audit --no-fund/m);
+    assert.match(said, /^npm (ci|install) --no-audit --no-fund --foreground-scripts/m);
     assert.ok(said.includes(`PATH=${dirname(process.execPath)}:/usr/bin:/bin`));
     assert.equal(readFileSync(join(c.root, "services", "scenes", "voices", "calm", "ran-here"), "utf8").trim().endsWith(join("voices", "calm")), true);
     assert.equal((await installVoice(bad.root, "calm", join(bad.home, "v.log"), { npm: bad.npm })).ok, false);
@@ -89,6 +89,36 @@ test("the voice screen's button: the launcher starts an install, says it is inst
     assert.equal((await call(port, "POST", "/launcher/voices/notes/install")).status, 404);
   } finally {
     await phone.stop();
+    c.remove();
+  }
+});
+
+test("a download's progress lines are read as bytes of bytes; anything else is not one", () => {
+  assert.deepEqual(progressOf('progress {"loaded":10,"total":40}'), { loaded: 10, total: 40 });
+  assert.deepEqual(progressOf('progress {"loaded":50,"total":40}'), { loaded: 40, total: 40 });
+  assert.equal(progressOf('progress {"loaded":1,"total":0}'), undefined);
+  assert.equal(progressOf("progress nope"), undefined);
+  assert.equal(progressOf("added 120 packages"), undefined);
+});
+
+test("while a voice installs it is getting its code, then downloading with bytes of bytes, then done", posixOnly, async () => {
+  const c = copy();
+  // An npm whose install script downloads in two steps, a moment apart, as the voice's own script prints it.
+  writeFileSync(c.npm, `#!/bin/sh\nsleep 0.3\necho 'progress {"loaded":5000000,"total":90000000}'\nsleep 0.4\necho 'progress {"loaded":90000000,"total":90000000}'\nsleep 0.3\n`);
+  const installs = new VoiceInstalls({ root: c.root, home: c.home, npm: c.npm });
+  try {
+    const started = installs.start("calm");
+    assert.equal(started.state === "installing" && started.step, "package");
+    const seen: string[] = [];
+    for (let i = 0; i < 100 && installs.state("calm").state === "installing"; i++) {
+      const now = installs.state("calm");
+      if (now.state === "installing") seen.push(now.step === "download" ? `${now.loaded}/${now.total}` : String(now.step));
+      await new Promise((r) => setTimeout(r, 25));
+    }
+    assert.deepEqual([...new Set(seen)], ["package", "5000000/90000000", "90000000/90000000"]);
+    assert.deepEqual(installs.state("calm"), { state: "done" });
+    assert.match(readFileSync(join(c.home, "logs", "voice-calm.log"), "utf8"), /progress/);
+  } finally {
     c.remove();
   }
 });
