@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { failure, lastJson, plainLine } from "../src/launcher.ts";
+import { failure, lastJson, openingTo, plainLine, reopenRequest } from "../src/launcher.ts";
 
 test("the launcher's answer is its last JSON line", () => {
   assert.deepEqual(lastJson('starting\n{"ok":true,"url":"http://127.0.0.1:5173"}\n'), { ok: true, url: "http://127.0.0.1:5173" });
@@ -19,4 +19,13 @@ test("a failure is the launcher's own message, else its last words", () => {
   const crash = ["node:internal/modules/cjs/loader:1568", "throw err;", "Error: Cannot find module '/x/cli/opensourcebook.mjs'", "at Module._load", "code: 'MODULE_NOT_FOUND'", "}", "Node.js v24.22.3"];
   assert.match(failure({ code: 1, said: crash }), /^Error: Cannot find module/);
   assert.match(failure({ code: 3, said: [] }), /code 3/);
+});
+
+test("a fresh page the launcher asks for is a path of the web app, shown once the window's own new address lets it in", () => {
+  assert.deepEqual(reopenRequest('{"to":"/projects/p1","at":"2026-11-26T08:00:00.000Z"}'), { to: "/projects/p1", at: "2026-11-26T08:00:00.000Z" });
+  assert.equal(reopenRequest('{"to":"//evil.example","at":"x"}')?.to, "/");
+  assert.equal(reopenRequest('{"to":"https://evil.example","at":"x"}')?.to, "/");
+  assert.equal(reopenRequest("not json"), undefined);
+  assert.equal(reopenRequest('{"to":"/"}'), undefined, "no time, no request");
+  assert.equal(openingTo("http://127.0.0.1:5173/api/open?code=abc&to=%2F", "/projects/p 1?tab=chat"), "http://127.0.0.1:5173/api/open?code=abc&to=%2Fprojects%2Fp+1%3Ftab%3Dchat");
 });

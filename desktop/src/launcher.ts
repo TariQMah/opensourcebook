@@ -89,3 +89,25 @@ export function failure(answer: Answer): string {
   const words = thrown && !last.includes(thrown) ? [thrown, ...last] : last;
   return words.length ? words.join("\n") : `The launcher stopped with code ${answer.code}.`;
 }
+
+/**
+ * The page the launcher asks the window to show again (`{ to, at }`, written where OPENSOURCEBOOK_REOPEN_FILE says):
+ * a path of the web app, else its home page; undefined when there is no request in it.
+ */
+export function reopenRequest(text: string): { to: string; at: string } | undefined {
+  try {
+    const asked = JSON.parse(text) as { to?: unknown; at?: unknown };
+    if (typeof asked.at !== "string") return undefined;
+    const to = typeof asked.to === "string" && asked.to.startsWith("/") && !asked.to.startsWith("//") && !asked.to.includes("\\") ? asked.to : "/";
+    return { to, at: asked.at };
+  } catch {
+    return undefined;
+  }
+}
+
+/** The one-time address `open --print` gave, made to show `to` once it lets the window in. */
+export function openingTo(entry: string, to: string): string {
+  const url = new URL(entry);
+  url.searchParams.set("to", to);
+  return url.toString();
+}

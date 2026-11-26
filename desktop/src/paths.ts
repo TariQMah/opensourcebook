@@ -38,6 +38,8 @@ export interface Layout {
   shell: string;
   /** What the desktop app did and what the launcher said, for "Show log". */
   log: string;
+  /** Where the launcher asks for a fresh page of the window (a tab from an earlier run wants one), as the app tells it. */
+  reopen: string;
 }
 
 export function layout(root: string): Layout {
@@ -49,6 +51,7 @@ export function layout(root: string): Layout {
     bin: join(root, "bin"),
     shell: join(root, "window"),
     log: join(root, "desktop.log"),
+    reopen: join(root, "reopen.json"),
   };
 }
 

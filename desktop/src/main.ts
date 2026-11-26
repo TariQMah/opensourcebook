@@ -4,10 +4,10 @@
  * them. While it starts the window shows one plain line of what is happening; when something goes wrong it says what,
  * with "Try again" and "Show log".
  */
-import { appendFileSync, mkdirSync, statSync, truncateSync, readFileSync } from "node:fs";
+import { appendFileSync, mkdirSync, statSync, truncateSync, readFileSync, watchFile } from "node:fs";
 import { dirname, join } from "node:path";
 import { app, BrowserWindow, dialog, ipcMain, Notification, shell } from "electron";
-import { failure, runLauncher } from "./launcher.ts";
+import { failure, openingTo, reopenRequest, runLauncher } from "./launcher.ts";
 import { appDataRoot, carried as carriedIn, layout, APP_NAME } from "./paths.ts";
 import { prepare } from "./prepare.ts";
 import { resolvePath } from "./shell-path.ts";
@@ -60,7 +60,8 @@ async function launcherEnv(): Promise<NodeJS.ProcessEnv> {
   const { path, fromShell } = await resolvePath({ first: [dirname(carried.node), at.bin] });
   if (!fromShell) log("The login shell did not say its PATH; the usual folders are used.");
   const clean = Object.fromEntries(Object.entries(process.env).filter(([k]) => !k.startsWith("ELECTRON_")));
-  env = { ...clean, PATH: path, OPENSOURCEBOOK_APP_DATA: at.root, OPENSOURCEBOOK_NO_OPEN: "1" };
+  // The launcher asks this window, not the browser, for the fresh page a tab from an earlier run wants (reopen below).
+  env = { ...clean, PATH: path, OPENSOURCEBOOK_APP_DATA: at.root, OPENSOURCEBOOK_NO_OPEN: "1", OPENSOURCEBOOK_REOPEN_FILE: at.reopen };
   return env;
 }
 
@@ -100,6 +101,33 @@ async function begin(): Promise<void> {
   } finally {
     starting = false;
   }
+}
+
+/**
+ * The window let in again: the launcher asked for a fresh page (the window, or a tab, was let in by an earlier run). It
+ * gets its own new one-time address for that page and is brought to the front; with no window, a new one starts.
+ */
+async function reopen(): Promise<void> {
+  let asked: { to: string; at: string } | undefined;
+  try {
+    asked = reopenRequest(readFileSync(at.reopen, "utf8"));
+  } catch {
+    return;
+  }
+  if (!asked) return;
+  if (!window) return createWindow();
+  if (starting) return;
+  if (window.isMinimized()) window.restore();
+  window.show();
+  window.focus();
+  const open = await launcher(["open", "--print", "--json"], undefined, false);
+  const entry = open.json?.open;
+  if (open.json?.ok !== true || typeof entry !== "string") {
+    log(`A fresh page was asked for, and could not be opened: ${failure(open)}`);
+    return;
+  }
+  log(`${new Date().toISOString()}  Letting the window in again for ${asked.to}.`);
+  await window.loadURL(openingTo(entry, asked.to)).catch((error: unknown) => log(`The fresh page did not load: ${error instanceof Error ? error.message : String(error)}`));
 }
 
 function notify(title: string, body?: string): void {
@@ -157,7 +185,13 @@ else {
     const picked = await dialog.showOpenDialog(window, { properties: ["openDirectory", "createDirectory"] });
     return picked.canceled ? undefined : picked.filePaths[0];
   });
-  app.whenReady().then(createWindow);
+  app.whenReady().then(() => {
+    createWindow();
+    // The launcher writes here when a page asks for a fresh one; only a change counts, never a request left from before.
+    watchFile(at.reopen, { interval: 1000 }, (now, before) => {
+      if (now.mtimeMs > before.mtimeMs) void reopen();
+    });
+  });
   app.on("activate", () => {
     if (!window) createWindow();
   });

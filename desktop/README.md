@@ -12,6 +12,8 @@ macOS first. Windows (#12) and Linux (#9) are later steps; the folders below alr
 4. **The programs.** It runs the launcher in the app data folder (`opensourcebook start --background --json`) with its own Node, and shows each line the launcher says on a plain starting page. The first start installs each program's packages and builds them once, which takes a few minutes. Later starts take seconds.
 5. **The window.** It asks the launcher for the one-time address that lets this window in (`opensourcebook open --print`) and shows the web app. Links to other sites open in the person's own browser.
 
+When a page in the window was let in by an earlier run of the programs and asks for a fresh one, the launcher asks the window instead of opening the browser: the app tells it a file to write the page in (`OPENSOURCEBOOK_REOPEN_FILE`, `reopen.json` in the app data folder), and on a change there the window gets its own new one-time address for that page and comes to the front. A plain `npm start` sets no such file, and the browser opens the page as before.
+
 When something goes wrong the page says what, with **Try again** and **Show log**. Closing the window quits the app, and quitting stops every program (`opensourcebook stop`).
 
 ## Updates
@@ -31,6 +33,7 @@ This updates the programs, not the app around them. The app itself has no self-u
 | `bin/`, `tools/` | ffmpeg and ffprobe, when the app fetched them |
 | `window/` | The window's own browser data (its cookie, its cache) |
 | `desktop.log` | What the app did and what the launcher said. **Show log** opens it |
+| `reopen.json` | The page the launcher last asked the window to show again, and when; it holds no address that lets anything in |
 
 Nothing is ever written inside the app itself, so it also runs from the disk image or from a read-only place.
 
