@@ -6,7 +6,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 import { Phone } from "../phone.ts";
-import { SetupActions, agentsPrefix, firstUrl, ownBins, useOwnBins, type SetupAgent } from "../setup.ts";
+import { SetupActions, agentsPrefix, asksForCode, deviceCodeOf, firstUrl, ownBins, scriptFor, useOwnBins, type SetupAgent } from "../setup.ts";
 
 const posixOnly = { skip: process.platform === "win32" ? "the fakes are shell scripts" : false };
 
@@ -22,13 +22,16 @@ function script(path: string, body: string): string {
 }
 
 /** An agent as the registry gives one, with a sign-in that says signed in once `signedIn` is set. */
-function fakeAgent(program: string, o: { npm?: string; signedIn?: () => boolean } = {}): SetupAgent {
+function fakeAgent(program: string, o: { npm?: string; script?: { unix?: string; windows?: string }; app?: NonNullable<NonNullable<SetupAgent["setup"]>["app"]>; signedIn?: () => boolean | undefined } = {}): SetupAgent {
   return {
     id: "pal",
     label: "Pal",
-    setup: { ...(o.npm ? { npm: o.npm } : {}), signIn: ["login"] },
+    setup: { ...(o.npm ? { npm: o.npm } : {}), ...(o.script ? { script: o.script } : {}), ...(o.app ? { app: o.app } : {}), signIn: ["login"] },
     program: () => program,
-    info: async () => ({ installed: true, signedIn: o.signedIn?.() ?? false }),
+    info: async () => {
+      const signedIn = o.signedIn ? o.signedIn() : false;
+      return { installed: true, ...(signedIn === undefined ? {} : { signedIn }) };
+    },
   };
 }
 
@@ -76,7 +79,7 @@ test("an agent is installed from its npm package into Open Sourcebook's own fold
     assert.equal(failed.state, "failed");
 
     const none = new SetupActions({ root: f.root, home: f.home, env, npm, agents: async () => [fakeAgent("/nowhere/pal")] });
-    assert.deepEqual(await none.install("pal"), { state: "failed", message: "Pal can't be installed from here; install it from its own page." });
+    assert.deepEqual(await none.install("pal"), { state: "failed", message: "Pal can't be installed from here; get it from its own page." });
   } finally {
     f.remove();
   }
@@ -138,7 +141,7 @@ test("the launcher's control answers Get set up: what its buttons can do, and an
     root: f.root,
     home: f.home,
     env: {},
-    agents: async () => [fakeAgent("/nowhere/pal", { npm: "@maker/pal" }), { id: "plain", label: "Plain", info: async () => ({ installed: false }) }],
+    agents: async () => [fakeAgent("/nowhere/pal", { npm: "@maker/pal" }), { id: "plain", label: "Plain", install: { url: "https://plain.example.test/get" }, info: async () => ({ installed: false }) }],
     ffmpeg: { found: async () => true, fetch: async () => ({ ok: true }) },
   });
   const phone = new Phone({ home: f.home, webPort: 1, doorPort: 0, controlPort: 0, token: "phone-token-0123456789", say: () => undefined, ansi: false, listenHost: "127.0.0.1", setup });
@@ -147,15 +150,109 @@ test("the launcher's control answers Get set up: what its buttons can do, and an
     const port = phone.controlPort;
     assert.deepEqual((await call(port, "GET", "/launcher/setup")).body, {
       agents: [
-        { id: "pal", label: "Pal", canInstall: true, canSignIn: true, install: { state: "idle" }, signIn: { state: "idle" } },
-        { id: "plain", label: "Plain", canInstall: false, canSignIn: false, install: { state: "idle" }, signIn: { state: "idle" } },
+        { id: "pal", label: "Pal", canInstall: true, how: "npm", canSignIn: true, install: { state: "idle" }, signIn: { state: "idle" } },
+        { id: "plain", label: "Plain", canInstall: false, how: "page", page: "https://plain.example.test/get", canSignIn: false, install: { state: "idle" }, signIn: { state: "idle" } },
       ],
       ffmpeg: { found: true, fetch: { state: "idle" } },
     });
     assert.equal((await call(port, "POST", "/launcher/agents/nobody/install")).status, 404);
+    assert.equal((await call(port, "POST", "/launcher/agents/pal/sign-in/code")).status, 400, "a code is sent as JSON");
     assert.equal((await call(port, "POST", "/launcher/tools/ffmpeg")).status, 202);
   } finally {
     await phone.stop();
+    f.remove();
+  }
+});
+
+test("an agent with no npm package is installed with its own installer, run with no terminal, its words in the log", posixOnly, async () => {
+  const f = folder();
+  try {
+    const env = { PATH: "/usr/bin:/bin" };
+    const pal = fakeAgent("/nowhere/pal", { script: { unix: `echo "fetching pal"; [ -t 0 ] && echo "has a terminal"; exit 0` } });
+    const setup = new SetupActions({ root: f.root, home: f.home, env, ffmpeg, platform: "darwin", agents: async () => [pal] });
+    assert.equal((await setup.view()).agents[0]!.how, "script");
+    assert.equal((await setup.install("pal")).state, "installing");
+    assert.deepEqual(await until(async () => (await setup.view()).agents[0]!.install, "installing"), { state: "done" });
+    assert.equal(readFileSync(join(f.home, "logs", "agent-pal.log"), "utf8"), "fetching pal\n");
+
+    const failing = new SetupActions({ root: f.root, home: f.home, env, ffmpeg, platform: "darwin", agents: async () => [fakeAgent("/nowhere/pal", { script: { unix: "exit 3" } })] });
+    await failing.install("pal");
+    assert.equal((await until(async () => (await failing.view()).agents[0]!.install, "installing")).state, "failed");
+
+    // An installer only for Windows, on a Mac: its page is opened instead.
+    const elsewhere = new SetupActions({ root: f.root, home: f.home, env, ffmpeg, platform: "darwin", agents: async () => [fakeAgent("/nowhere/pal", { script: { windows: "irm https://pal.example.test/i.ps1 | iex" } })] });
+    assert.equal((await elsewhere.view()).agents[0]!.how, "page");
+    assert.equal((await elsewhere.install("pal")).state, "failed");
+  } finally {
+    f.remove();
+  }
+});
+
+test("each kind of computer runs an installer in its own shell", () => {
+  const script = { unix: "curl -fsSL https://pal.example.test/i.sh | bash", windows: "irm https://pal.example.test/i.ps1 | iex" };
+  assert.deepEqual(scriptFor(script, "linux"), { bin: "bash", args: ["-c", script.unix] });
+  assert.deepEqual(scriptFor(script, "win32")?.args.at(-1), script.windows);
+  assert.equal(scriptFor({ unix: script.unix }, "win32"), undefined);
+  assert.equal(scriptFor(undefined, "darwin"), undefined);
+});
+
+test("an agent's maker's app is found where its adapter says it is put, in the home folder too", async () => {
+  const f = folder();
+  try {
+    const app = { label: "Pal", paths: { darwin: ["/Applications/Pal.app", "~/Applications/Pal.app"] } };
+    const there = new Set(["/home/ann/Applications/Pal.app"]);
+    const make = (platform: NodeJS.Platform) =>
+      new SetupActions({ root: f.root, home: f.home, env: {}, ffmpeg, platform, userHome: "/home/ann", exists: (p) => there.has(p), agents: async () => [fakeAgent("/nowhere/pal", { npm: "@maker/pal", app })] });
+    assert.equal((await make("darwin").view()).agents[0]!.appFound, "Pal");
+    assert.equal((await make("linux").view()).agents[0]!.appFound, undefined);
+    there.clear();
+    assert.equal((await make("darwin").view()).agents[0]!.appFound, undefined);
+  } finally {
+    f.remove();
+  }
+});
+
+test("a one-time code to enter, and a sign-in that asks for a code to be pasted, are told from what it printed", () => {
+  assert.equal(deviceCodeOf("To authenticate, visit https://github.example.test/login/device and enter code 1A2B-3C4D"), "1A2B-3C4D");
+  assert.equal(deviceCodeOf("open https://login.example.test/?code=true&client_id=9d1c250a-e61b-44d9"), undefined);
+  assert.equal(deviceCodeOf("Waiting for authorization..."), undefined);
+  assert.equal(asksForCode("If the browser didn't open, visit:\nhttps://login.example.test/x\nPaste code here if prompted > "), true);
+  assert.equal(asksForCode("Starting local login server on http://localhost:1455."), false);
+});
+
+test("a code the person pastes is written to the agent's own sign-in as typed, which then finishes", posixOnly, async () => {
+  const f = folder();
+  try {
+    const got = join(f.root, "got");
+    // A sign-in like one that offers a page and waits for the code it shows.
+    const pal = script(join(f.root, "pal"), `echo "visit https://login.example.test/start"\nprintf "Paste code here if prompted > "\nread code\necho "$code" > "${got}"\nexit 0`);
+    let signedIn = false;
+    const setup = new SetupActions({ root: f.root, home: f.home, env: { PATH: "/usr/bin:/bin" }, pollMs: 20, ffmpeg, agents: async () => [fakeAgent(pal, { signedIn: () => signedIn })] });
+    assert.equal((await setup.sendCode("pal", "early")).state, "failed", "no sign-in going yet");
+    await setup.signIn("pal");
+    const asking = await until(async () => {
+      const s = (await setup.view()).agents[0]!.signIn;
+      return s.state === "signingIn" && !s.asksCode ? { state: "waiting" } : s;
+    }, "waiting");
+    assert.equal("asksCode" in asking && asking.asksCode, true);
+    assert.equal((await setup.sendCode("pal", "two\nlines")).state, "failed");
+    signedIn = true;
+    assert.equal((await setup.sendCode("pal", "  abc#123  ")).state, "signingIn");
+    assert.deepEqual(await until(async () => (await setup.view()).agents[0]!.signIn, "signingIn"), { state: "done" });
+    assert.equal(readFileSync(got, "utf8"), "abc#123\n");
+  } finally {
+    f.remove();
+  }
+});
+
+test("an agent that can't say whether it is signed in is signed in when its sign-in ends well", posixOnly, async () => {
+  const f = folder();
+  try {
+    const ok = script(join(f.root, "ok"), "echo 'Signed in successfully.'\nexit 0");
+    const setup = new SetupActions({ root: f.root, home: f.home, env: { PATH: "/usr/bin:/bin" }, pollMs: 20, ffmpeg, agents: async () => [fakeAgent(ok, { signedIn: () => undefined })] });
+    await setup.signIn("pal");
+    assert.deepEqual(await until(async () => (await setup.view()).agents[0]!.signIn, "signingIn"), { state: "done" });
+  } finally {
     f.remove();
   }
 });

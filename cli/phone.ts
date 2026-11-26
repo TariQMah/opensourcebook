@@ -20,8 +20,9 @@
  *   GET    /launcher/voices/:id               how installing a voice that runs here is going
  *   POST   /launcher/voices/:id/install       installs it
  *   GET    /launcher/setup                    what Get set up's buttons can do and how each is going
- *   POST   /launcher/agents/:id/install       installs an agent from its npm package
+ *   POST   /launcher/agents/:id/install       installs an agent from its npm package or with its own installer
  *   POST   /launcher/agents/:id/sign-in       starts the agent's own sign-in and watches it
+ *   POST   /launcher/agents/:id/sign-in/code  { code }: the code its sign-in page shows, written to that sign-in
  *   POST   /launcher/tools/ffmpeg             fetches ffmpeg
  *   GET    /launcher/backups                  the weekly backup: on or off, how many are kept, the last one (cli/backups.ts)
  *   POST   /launcher/backups/on|off           turns it on (backing up now when one is due) or off
@@ -306,6 +307,18 @@ export class Phone {
       const setup = this.o.setup;
       if (setup && path === "/launcher/setup" && req.method === "GET") return reply(200, await setup.view());
       if (setup && path === "/launcher/tools/ffmpeg" && req.method === "POST") return reply(202, setup.fetchFfmpeg());
+      const pasted = /^\/launcher\/agents\/([a-z0-9-]{1,40})\/sign-in\/code$/.exec(path);
+      if (setup && pasted && req.method === "POST") {
+        const text = await readSmall(req, 8192);
+        let code: unknown;
+        try {
+          code = (JSON.parse(text ?? "") as { code?: unknown }).code;
+        } catch {
+          return reply(400, { error: "bad_request", message: "Send the code as JSON." });
+        }
+        if (typeof code !== "string") return reply(400, { error: "bad_request", message: "Send the code as JSON." });
+        return reply(200, { agent: pasted[1]!, ...(await setup.sendCode(pasted[1]!, code)) });
+      }
       const agent = /^\/launcher\/agents\/([a-z0-9-]{1,40})\/(install|sign-in)$/.exec(path);
       if (setup && agent && req.method === "POST") {
         const id = agent[1]!;

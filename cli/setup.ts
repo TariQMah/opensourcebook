@@ -8,14 +8,23 @@
  *   one-line install's), from the package its adapter names, into Open Sourcebook's own folder: `agents/` in the app
  *   data folder, else in the state folder. That folder's programs are put first on the PATH of every program the
  *   launcher starts, so the connector finds an agent installed while it runs at its next check.
+ * - An agent with no npm package is installed with the one-line installer its own install page gives, which its
+ *   adapter names, run here in `bash` (PowerShell on Windows) with no terminal shown and its words kept in a log. It
+ *   puts the program where it always does, which the connector looks in (services/agent-connector/src/agents/locate.ts).
+ *   One with neither has its install page opened by the web app instead.
+ * - When an agent's maker's desktop app is here (its adapter says where it is put), setup says so, as that app does
+ *   not give the program Open Sourcebook runs.
  * - A sign-in is the agent's own command, which opens the browser at the provider's login. The launcher only starts it
  *   and asks the agent, as the connector does, whether it is signed in yet. The login is made between the agent and its
- *   provider: Open Sourcebook never reads, holds or passes it on. The only thing passed on is the address of the
- *   provider's login page the agent prints, for when the browser did not open.
+ *   provider: Open Sourcebook never reads, holds or passes it on. What is passed on is what the agent prints for the
+ *   person: the address of the provider's login page, for when the browser did not open, and a one-time code to enter
+ *   there when it gives one. When the agent asks for a code from the provider's page to be pasted, the person pastes
+ *   it on the page and it is written to the agent's own sign-in as typed, never kept.
  * - ffmpeg is fetched the way the installer does it (install/package/lib/tools.mjs), into `tools/` with links in `bin/`.
  */
 import { spawn, type ChildProcess } from "node:child_process";
-import { createWriteStream, mkdirSync } from "node:fs";
+import { createWriteStream, existsSync, mkdirSync } from "node:fs";
+import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { appDataOf } from "./app-data.ts";
@@ -48,7 +57,14 @@ export function useOwnBins(env: NodeJS.ProcessEnv, home: string, platform: NodeJ
 export interface SetupAgent {
   id: string;
   label: string;
-  setup?: { npm?: string; signIn?: readonly string[] };
+  setup?: {
+    npm?: string;
+    script?: { unix?: string; windows?: string };
+    signIn?: readonly string[];
+    app?: { label: string; paths: Partial<Record<NodeJS.Platform, readonly string[]>> };
+  };
+  /** Its own install page. */
+  install?: { url: string };
   program?(): string;
   info(): Promise<{ installed: boolean; signedIn?: boolean }>;
 }
@@ -62,14 +78,30 @@ export async function registryAgents(root: string, env: NodeJS.ProcessEnv = proc
   return registry.createDefaultAgents(registry.agentBins(env)).list();
 }
 
-/** Where a sign-in stands: started (with the login page's address once the agent printed it), done, or failed. */
-export type SignInState = { state: "idle" } | { state: "signingIn"; since: string; url?: string } | { state: "done" } | { state: "failed"; message: string };
+/**
+ * Where a sign-in stands: started, done, or failed. While started: the login page's address once the agent printed
+ * it, a one-time code it printed to enter there (`deviceCode`), and whether it asks for a code from that page to be
+ * pasted back (`asksCode`).
+ */
+export type SignInState =
+  | { state: "idle" }
+  | { state: "signingIn"; since: string; url?: string; deviceCode?: string; asksCode?: boolean }
+  | { state: "done" }
+  | { state: "failed"; message: string };
+
+/** How a button gets an agent: npm, its own installer, or (neither) its install page opened. */
+export type InstallHow = "npm" | "script" | "page";
 
 /** What Get set up reads of one agent: whether a button can install it or sign in to it, and how that is going. */
 export interface AgentSetupView {
   id: string;
   label: string;
   canInstall: boolean;
+  how: InstallHow;
+  /** Its own install page. */
+  page?: string;
+  /** The name of its maker's desktop app when that app is on this computer. */
+  appFound?: string;
   canSignIn: boolean;
   install: InstallState;
   signIn: SignInState;
@@ -85,6 +117,23 @@ export function firstUrl(text: string): string | undefined {
   return /https:\/\/[^\s"'<>]+/.exec(text)?.[0]?.replace(/[).,;:]+$/, "");
 }
 
+/** A one-time code an agent printed for the person to enter on its provider's page, like `ABCD-1234`. */
+export function deviceCodeOf(text: string): string | undefined {
+  // Its letters are capitals and digits, so a lowercase id in an address is never taken for one.
+  return /\b(?:[Cc]ode|[Ee]nter)\b[^\n]*?(?<![\w=-])([A-Z0-9]{4,}-[A-Z0-9]{4,})(?![\w-])/.exec(text)?.[1];
+}
+
+/** Whether an agent's sign-in asks for a code from the provider's page to be pasted into it. */
+export function asksForCode(text: string): boolean {
+  return /paste (the |your )?(authori[sz]ation )?code|enter (the |your )?(authori[sz]ation )?code here|code here/i.test(text);
+}
+
+/** The installer an agent's adapter gives for this kind of computer, and the shell that runs it. */
+export function scriptFor(script: { unix?: string; windows?: string } | undefined, platform: NodeJS.Platform): { bin: string; args: string[] } | undefined {
+  if (platform === "win32") return script?.windows ? { bin: "powershell.exe", args: ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", script.windows] } : undefined;
+  return script?.unix ? { bin: "bash", args: ["-c", script.unix] } : undefined;
+}
+
 export interface SetupOptions {
   root: string;
   /** The launcher's state folder; its `logs/` holds each install's words. */
@@ -98,6 +147,12 @@ export interface SetupOptions {
   pollMs?: number;
   /** How long a sign-in may wait for the person before it is stopped. */
   signInMs?: number;
+  /** The kind of computer; this one's by default. */
+  platform?: NodeJS.Platform;
+  /** Whether a path is there (an agent's maker's app); the file system by default. */
+  exists?: (path: string) => boolean;
+  /** The home folder an app path's `~` is; this person's by default. */
+  userHome?: string;
   /** Whether ffmpeg is there now, and fetching it; the installer's own by default. */
   ffmpeg?: { found(): Promise<boolean>; fetch(): Promise<{ ok: boolean; message?: string }> };
 }
@@ -125,15 +180,41 @@ export class SetupActions {
     return (await this.agents()).find((a) => a.id === id);
   }
 
+  private platform(): NodeJS.Platform {
+    return this.o.platform ?? process.platform;
+  }
+
+  /** How a button gets `agent` on this kind of computer. */
+  private how(agent: SetupAgent): InstallHow {
+    if (agent.setup?.npm) return "npm";
+    return scriptFor(agent.setup?.script, this.platform()) ? "script" : "page";
+  }
+
+  /** The name of `agent`'s maker's desktop app when it is on this computer. */
+  private appFound(agent: SetupAgent): string | undefined {
+    const app = agent.setup?.app;
+    const home = this.o.userHome ?? homedir();
+    const exists = this.o.exists ?? existsSync;
+    const here = (app?.paths[this.platform()] ?? []).some((p) => exists(p.startsWith("~/") ? join(home, p.slice(2)) : p));
+    return here ? app!.label : undefined;
+  }
+
   async view(): Promise<SetupView> {
-    const agents = (await this.agents()).map((a) => ({
-      id: a.id,
-      label: a.label,
-      canInstall: !!a.setup?.npm,
-      canSignIn: !!a.setup?.signIn && !!a.program,
-      install: this.installs.get(a.id) ?? { state: "idle" as const },
-      signIn: this.signIns.get(a.id)?.state ?? { state: "idle" as const },
-    }));
+    const agents = (await this.agents()).map((a): AgentSetupView => {
+      const how = this.how(a);
+      const app = this.appFound(a);
+      return {
+        id: a.id,
+        label: a.label,
+        canInstall: how !== "page",
+        how,
+        ...(a.install?.url ? { page: a.install.url } : {}),
+        ...(app ? { appFound: app } : {}),
+        canSignIn: !!a.setup?.signIn && !!a.program,
+        install: this.installs.get(a.id) ?? { state: "idle" as const },
+        signIn: this.signIns.get(a.id)?.state ?? { state: "idle" as const },
+      };
+    });
     const found = await this.ffmpeg().found().catch(() => false);
     return { agents, ffmpeg: { found, fetch: this.fetching } };
   }
@@ -143,17 +224,26 @@ export class SetupActions {
     return !!(await this.agent(id));
   }
 
-  /** Installs agent `id` from its npm package unless it is installing already; answers with its state. */
+  /**
+   * Installs agent `id` unless it is installing already, from its npm package or else with its own installer; answers
+   * with its state.
+   */
   async install(id: string): Promise<InstallState> {
     const agent = await this.agent(id);
-    if (!agent?.setup?.npm) return { state: "failed", message: `${agent?.label ?? id} can't be installed from here; install it from its own page.` };
+    const how = agent ? this.how(agent) : "page";
+    if (!agent || how === "page") return { state: "failed", message: `${agent?.label ?? id} can't be installed from here; get it from its own page.` };
     const now = this.installs.get(id);
     if (now?.state === "installing") return now;
     const started: InstallState = { state: "installing", since: new Date().toISOString() };
     this.installs.set(id, started);
     const prefix = agentsPrefix(this.env(), this.o.home);
     const log = join(this.o.home, "logs", `agent-${id}.log`);
-    npmRun(["install", "--global", "--prefix", prefix, "--no-audit", "--no-fund", agent.setup.npm], { cwd: dirname(prefix), log, env: this.env(), ...(this.o.npm ? { npm: this.o.npm } : {}) })
+    const script = scriptFor(agent.setup?.script, this.platform());
+    const running =
+      how === "npm"
+        ? npmRun(["install", "--global", "--prefix", prefix, "--no-audit", "--no-fund", agent.setup!.npm!], { cwd: dirname(prefix), log, env: this.env(), ...(this.o.npm ? { npm: this.o.npm } : {}) })
+        : logRun(script!.bin, script!.args, { cwd: this.o.home, log, env: this.env() });
+    running
       .then((ok) => this.installs.set(id, ok ? { state: "done" } : { state: "failed", message: `It did not finish. What it said is in ${log}.` }))
       .catch((error: unknown) => this.installs.set(id, { state: "failed", message: error instanceof Error ? error.message : String(error) }));
     return started;
@@ -179,24 +269,36 @@ export class SetupActions {
     try {
       // Its stdin stays open, so a sign-in that waits for the person's answer in the browser is not cut short.
       child = spawn(agent.program(), [...args], { env: this.env(), stdio: ["pipe", "pipe", "pipe"], windowsHide: true, shell: process.platform === "win32" });
+      // A closed pipe (a sign-in that already ended) is not the launcher's error.
+      child.stdin?.on("error", () => undefined);
     } catch (error) {
       set({ state: "failed", message: error instanceof Error ? error.message : String(error) });
       return entry.state;
     }
     entry.child = child;
+    let said = "";
     const heard = (chunk: Buffer) => {
-      const url = firstUrl(chunk.toString());
-      if (url && entry.state.state === "signingIn" && !entry.state.url) set({ state: "signingIn", since, url });
+      if (entry.state.state !== "signingIn") return;
+      // What it said so far, kept short: only its address, its code and whether it asks for one are read from it.
+      said = (said + chunk.toString()).slice(-8_000);
+      const was = entry.state;
+      const url = was.url ?? firstUrl(said);
+      const deviceCode = was.deviceCode ?? deviceCodeOf(said);
+      const asksCode = was.asksCode || asksForCode(said);
+      if (url !== was.url || deviceCode !== was.deviceCode || asksCode !== !!was.asksCode)
+        set({ state: "signingIn", since, ...(url ? { url } : {}), ...(deviceCode ? { deviceCode } : {}), ...(asksCode ? { asksCode } : {}) });
     };
     child.stdout?.on("data", heard);
     child.stderr?.on("data", heard);
-    const signedIn = async () => {
+    // Whether the agent says it is signed in: true, false, or undefined when it can't say.
+    const status = async () => {
       try {
-        return (await agent.info()).signedIn === true;
+        return (await agent.info()).signedIn;
       } catch {
         return false;
       }
     };
+    const signedIn = async () => (await status()) === true;
     const finish = (state: SignInState) => {
       clearInterval(poll);
       clearTimeout(limit);
@@ -218,13 +320,28 @@ export class SetupActions {
     child.once("error", (error) => {
       if (current()) finish({ state: "failed", message: error.message });
     });
-    child.once("close", () => {
+    child.once("close", (code) => {
       if (!current()) return;
-      // Its sign-in ended by itself: asked once more, as it may have signed in just before it closed.
-      void signedIn().then((yes) => {
+      // Its sign-in ended by itself: asked once more, as it may have signed in just before it closed. An agent that
+      // can't say whether it is signed in is taken at its word when its sign-in ended well.
+      void status().then((now) => {
+        const yes = now === true || (now === undefined && code === 0);
         if (current()) finish(yes ? { state: "done" } : { state: "failed", message: `${agent.label}'s sign-in closed before it finished. Press Sign in to try again.` });
       });
     });
+    return entry.state;
+  }
+
+  /**
+   * Writes the code the person pasted from the provider's page to agent `id`'s sign-in, as they would type it, when
+   * that sign-in is going and asked for one. The code is not kept.
+   */
+  async sendCode(id: string, code: string): Promise<SignInState> {
+    const entry = this.signIns.get(id);
+    const typed = code.trim();
+    if (!entry || entry.state.state !== "signingIn" || !entry.child?.stdin?.writable) return { state: "failed", message: "That sign-in is not going any more. Press Sign in to start again." };
+    if (!typed || typed.length > 4_096 || /[\r\n]/.test(typed)) return { state: "failed", message: "Paste the code the sign-in page shows, on one line." };
+    entry.child.stdin.write(`${typed}\n`);
     return entry.state;
   }
 
@@ -275,12 +392,17 @@ function installerTools(root: string, home: string, env: NodeJS.ProcessEnv): Non
 
 /** Runs npm with `args` in `cwd`, its words to `log`; resolves with whether it worked. */
 function npmRun(args: string[], o: { cwd: string; log: string; env: NodeJS.ProcessEnv; npm?: string }): Promise<boolean> {
+  const npm = o.npm ?? (process.platform === "win32" ? "npm.cmd" : "npm");
+  return logRun(npm, args, { ...o, env: withOwnNode(o.env), shell: process.platform === "win32" });
+}
+
+/** Runs `bin` with `args` in `cwd` with nothing to answer it and no window, its words to `log`; resolves with whether it worked. */
+function logRun(bin: string, args: string[], o: { cwd: string; log: string; env: NodeJS.ProcessEnv; shell?: boolean }): Promise<boolean> {
   mkdirSync(o.cwd, { recursive: true });
   mkdirSync(dirname(o.log), { recursive: true });
   const out = createWriteStream(o.log, { flags: "w" });
-  const npm = o.npm ?? (process.platform === "win32" ? "npm.cmd" : "npm");
   return new Promise((resolve) => {
-    const child = spawn(npm, args, { cwd: o.cwd, env: withOwnNode(o.env), stdio: ["ignore", "pipe", "pipe"], shell: process.platform === "win32", windowsHide: true });
+    const child = spawn(bin, args, { cwd: o.cwd, env: o.env, stdio: ["ignore", "pipe", "pipe"], shell: o.shell ?? false, windowsHide: true });
     child.stdout.on("data", (chunk: Buffer) => out.write(chunk));
     child.stderr.on("data", (chunk: Buffer) => out.write(chunk));
     child.once("error", (error) => out.end(`\n${error.message}\n`, () => resolve(false)));
