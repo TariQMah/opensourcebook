@@ -37,7 +37,7 @@ function Status({ p }: { p: Provider }): ReactNode {
 }
 
 /** What to run to connect one the person has not installed, from the engine, with nothing assumed. */
-function HowTo({ p, onCheck, checking }: { p: Provider; onCheck: () => void; checking: boolean }) {
+function HowTo({ p, onCheck, checking, checked }: { p: Provider; onCheck: () => void; checking: boolean; checked: boolean }) {
   const steps: ReactNode[] = [];
   if (p.state !== "signedOut") {
     steps.push(
@@ -75,6 +75,12 @@ function HowTo({ p, onCheck, checking }: { p: Provider; onCheck: () => void; che
           <li key={i}>{s}</li>
         ))}
       </ol>
+      {checked && !checking && p.state === "missing" && (
+        // Checked again and still not found: an install in a place it is not looked for is seen only after a restart.
+        <p className="fr-restart" role="status">
+          Still not found. If you just installed it, close Open Sourcebook and open it again from its shortcut, then come back here.
+        </p>
+      )}
       <OutlineButton onClick={onCheck} disabled={checking}>
         {checking ? "Checking…" : "Check again"}
       </OutlineButton>
@@ -92,6 +98,7 @@ export function ProvidersStep({ onNext, onConnected }: { onNext: () => void; onC
   const [open, setOpen] = useState<string[]>([]);
   const [busy, setBusy] = useState<string>();
   const [checking, setChecking] = useState(false);
+  const [checked, setChecked] = useState(false);
   const [error, setError] = useState<unknown>();
   const data = loaded.data;
   const list = useMemo(() => byName(data?.providers ?? []), [data]);
@@ -117,6 +124,7 @@ export function ProvidersStep({ onNext, onConnected }: { onNext: () => void; onC
     setError(undefined);
     try {
       replace(await client.providers({ fresh: true }));
+      setChecked(true);
     } catch (e) {
       setError(e);
     } finally {
@@ -201,7 +209,7 @@ export function ProvidersStep({ onNext, onConnected }: { onNext: () => void; onC
                     </OutlineButton>
                   )}
                 </div>
-                {howTo && <HowTo p={p} onCheck={() => void check()} checking={checking} />}
+                {howTo && <HowTo p={p} onCheck={() => void check()} checking={checking} checked={checked} />}
               </li>
             );
           })}

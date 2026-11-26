@@ -115,6 +115,8 @@ describe("step 1: providers", () => {
     expect(within(how).getByText("agy login")).toBeInTheDocument();
     await userEvent.click(within(how).getByRole("button", { name: "Check again" }));
     await waitFor(() => expect(calls.some((c) => c.path === "/v1/providers" && c.query.get("fresh") === "1")).toBe(true));
+    // Still not found after the check: it says plainly that a restart is what is left.
+    expect(await within(how).findByRole("status")).toHaveTextContent("If you just installed it, close Open Sourcebook and open it again");
   });
 
   it("links the install page when the agent has no command", async () => {
