@@ -40,6 +40,7 @@
  *   PUT|DELETE /v1/projects/:id/folder   POST /v1/projects/:id/folder/check   (a project linked to a folder here)
  *   GET|PUT /v1/library   (the folder finished videos are copied into)
  *                              (the August API, kept as a wrapper for the iOS app)
+ *   GET|POST /v1/groups   PATCH|DELETE /v1/groups/:id   (folders on Home that projects are kept in)
  *
  * Every /v1 route but assets needs the client token. The queue handler runs
  * generation jobs from the main queue and ends jobs the dead-letter queue
@@ -51,6 +52,7 @@ import type { JobQueueBatch } from "./jobs/types";
 import { errorResponse, json, notFound } from "./http";
 import { cancelLegacyJob, createJob, getJob, retryLegacyJob } from "./routes/jobs";
 import { showJobFiles } from "./routes/job-files";
+import { createGroup, deleteGroup, listGroups, renameGroup } from "./routes/groups";
 import { checkProjectFolder, getLibrary, linkFolder, setLibrary, unlinkFolder } from "./routes/folders";
 import { listEdgeKinds, listFormats } from "./routes/formats";
 import {
@@ -176,6 +178,13 @@ async function route(request: Request, deps: EngineDeps | undefined, ctx: Worker
     if (method === "GET") return listProjects(request, deps);
   }
   if (method === "POST" && path === "/v1/projects/import") return importProjectBundle(request, deps);
+  if (path === "/v1/groups") {
+    if (method === "GET") return listGroups(request, deps);
+    if (method === "POST") return createGroup(request, deps);
+  }
+  const group = /^\/v1\/groups\/([^/]+)$/.exec(path);
+  if (group && method === "PATCH") return renameGroup(request, decodeURIComponent(group[1]!), deps);
+  if (group && method === "DELETE") return deleteGroup(request, decodeURIComponent(group[1]!), deps);
   const folder = /^\/v1\/projects\/([^/]+)\/folder(\/check)?$/.exec(path);
   if (folder) {
     const id = decodeURIComponent(folder[1]!);

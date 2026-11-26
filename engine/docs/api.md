@@ -204,7 +204,9 @@ Payloads:
 ```
 
 `icon`, `colorHex`, `category` and `archivedAt` are optional. `category` is
-the screen word *topic*. `settings` is free JSON the clients own.
+the screen word *topic*. `settings` is free JSON the clients own. `groupId`
+is there when the project is kept in a folder on Home ("Folders on Home",
+below).
 
 ### Source (in lists)
 
@@ -520,7 +522,7 @@ keeps why a failed call failed (`error`: `timeout`, `http`, `network` or
 | `POST /v1/projects` | `{ title, icon?, colorHex?, category?, settings? }` | `201 { project }` | `400 invalid_request` |
 | `GET /v1/projects` | *paged*; `?archived=include\|only` (default: not archived) | `200 { projects, nextCursor? }` most recently updated first | |
 | `GET /v1/projects/:id` | `?counts=1` adds `counts` | `200 { project, counts? }` | `404` |
-| `PATCH /v1/projects/:id` | `{ title?, icon?, colorHex?, category?, settings? }` | `200 { project }` | `400 invalid_request`, `404` |
+| `PATCH /v1/projects/:id` | `{ title?, icon?, colorHex?, category?, settings?, groupId? }` | `200 { project }` | `400 invalid_request`, `404` |
 | `POST /v1/projects/:id/archive` | none | `200 { project }` | `404` |
 | `POST /v1/projects/:id/unarchive` | none | `200 { project }` | `404` |
 | `DELETE /v1/projects/:id` | | `200 { projectId, deleted: { chats, plans, outputs, sources } }` | `404`, `409 project_busy` |
@@ -556,6 +558,28 @@ keeps why a failed call failed (`error`: `timeout`, `http`, `network` or
   back waiting to be made. A plan started when it was kept comes back
   stopped, not running. `example` is the name of the `examples/` folder the
   bundle came from; it is kept in the new project's `settings.example`.
+
+### Folders on Home (Nov 26, 2026; #66)
+
+A person keeps projects in folders on Home. In code a folder on Home is a
+*group* (`project_groups`, migrations/0024), so it is never mixed up with the
+folder on disk a project may be linked to. A project is in one folder or
+none.
+
+| Route | Request | Response | Errors |
+|---|---|---|---|
+| `GET /v1/groups` | | `200 { groups: [{ id, title, projects, createdAt, updatedAt }] }` by name | |
+| `POST /v1/groups` | `{ title }` | `201 { group }` | `400 invalid_request` |
+| `PATCH /v1/groups/:id` | `{ title }` | `200 { group }` | `400 invalid_request`, `404` |
+| `DELETE /v1/groups/:id` | | `200 { groupId, moved }` | `404` |
+
+- `title` is 1 to 100 characters after trimming. `projects` counts every
+  project in it, archived ones too.
+- `PATCH /v1/projects/:id { groupId }` moves a project into a folder;
+  `groupId: null` puts it back on Home. Moving does not change `updatedAt`.
+  Another owner's folder, or one that does not exist, is a `404`.
+- Deleting a folder puts its projects back on Home (`moved` counts them). It
+  never deletes a project.
 
 ## Sources in a project and the Inbox
 

@@ -39,6 +39,8 @@ export interface Project {
   folderCheckedAt?: string;
   /** The name of the project's folder in the library, kept from the first video copied there. */
   libraryName?: string;
+  /** The folder on Home it is kept in (migrations/0024); absent, it is on Home itself. */
+  groupId?: string;
 }
 
 export interface NewProject {
@@ -72,6 +74,7 @@ interface ProjectRow {
   folder_path: string | null;
   folder_checked_at: string | null;
   library_name: string | null;
+  group_id?: string | null;
 }
 
 export class ProjectRepository {
@@ -193,5 +196,6 @@ function fromRow(row: ProjectRow): Project {
     folder: opt(row.folder_path),
     folderCheckedAt: opt(row.folder_checked_at),
     libraryName: opt(row.library_name),
+    groupId: opt(row.group_id ?? null),
   });
 }

@@ -5,7 +5,7 @@
  *   POST  /v1/projects                  → 201 { project }
  *   GET   /v1/projects                  → 200 { projects, nextCursor? }   ?archived=include|only, paged
  *   GET   /v1/projects/:id              → 200 { project, counts? }        ?counts=1 adds { chats, plans, outputs, sources }
- *   PATCH /v1/projects/:id              → 200 { project }
+ *   PATCH /v1/projects/:id              → 200 { project }                 { groupId } moves it into a folder on Home (routes/groups.ts)
  *   POST  /v1/projects/:id/archive      → 200 { project }
  *   POST  /v1/projects/:id/unarchive    → 200 { project }
  *   DELETE /v1/projects/:id             → 200 { projectId, deleted: { chats, plans, outputs, sources } }
@@ -80,9 +80,16 @@ export async function updateProject(request: Request, id: string, deps: EngineDe
   if ("response" in owned) return owned.response;
   const read = await readJsonObject(request);
   if ("response" in read) return read.response;
-  const fields = readFields(() => projectFields(read.body));
+  const fields = readFields(() => ({ patch: projectFields(read.body), groupId: clearableId(read.body, "groupId") }));
   if ("response" in fields) return fields.response;
-  const project = await deps.repos.projects.update(id, fields.value);
+  const { patch, groupId } = fields.value;
+  if (groupId) {
+    const group = await deps.repos.groups.get(groupId);
+    if (!group || group.ownerId !== owned.ownerId) return notFound("Folder not found");
+  }
+  // Moving it between folders is not a change to the project, so its place in lists stays.
+  if (groupId !== undefined) await deps.repos.groups.place(id, groupId);
+  const project = Object.keys(patch).length ? await deps.repos.projects.update(id, patch) : await deps.repos.projects.get(id);
   return json({ project: projectView(project!) });
 }
 

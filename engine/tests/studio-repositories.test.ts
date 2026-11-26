@@ -72,6 +72,7 @@ describe("migrations", () => {
       "0021_owner_settings.sql",
       "0022_agent_turn_pick.sql",
       "0023_folder_sources.sql",
+      "0024_project_groups.sql",
     ]);
     const { db } = setup();
     const tables = (db.raw.prepare("SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name").all() as { name: string }[]).map(
@@ -95,6 +96,7 @@ describe("migrations", () => {
       "plan_stage_dates",
       "plan_stages",
       "plans",
+      "project_groups",
       "projects",
       "provider_settings",
       "sessions",

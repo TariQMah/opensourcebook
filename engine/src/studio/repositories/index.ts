@@ -1,6 +1,7 @@
 /** Typed repositories over the Studio tables (migrations/0004_studio.sql, 0005). */
 import type { D1DatabaseLike } from "../../types/bindings";
 import { AgentTurnRepository } from "./agent-turns";
+import { ProjectGroupRepository } from "./groups";
 import { MakeTimeRepository } from "./make-times";
 import { OutputRepository } from "./outputs";
 import { PlanRepository } from "./plans";
@@ -15,6 +16,7 @@ import { OwnerSettingsRepository } from "./owner-settings";
 
 export interface StudioRepositories {
   projects: ProjectRepository;
+  groups: ProjectGroupRepository;
   sources: SourceRepository;
   sessions: SessionRepository;
   plans: PlanRepository;
@@ -31,6 +33,7 @@ export function createStudioRepositories(db: D1DatabaseLike, options: Repository
   const ctx = repositoryContext(db, options);
   return {
     projects: new ProjectRepository(ctx),
+    groups: new ProjectGroupRepository(ctx),
     sources: new SourceRepository(ctx),
     sessions: new SessionRepository(ctx),
     plans: new PlanRepository(ctx),
@@ -45,6 +48,7 @@ export function createStudioRepositories(db: D1DatabaseLike, options: Repository
 }
 
 export * from "./agent-turns";
+export * from "./groups";
 export * from "./make-times";
 export * from "./outputs";
 export * from "./plans";
