@@ -41,6 +41,7 @@
  *   GET|PUT /v1/library   (the folder finished videos are copied into)
  *                              (the August API, kept as a wrapper for the iOS app)
  *   GET|POST /v1/groups   PATCH|DELETE /v1/groups/:id   (folders on Home that projects are kept in)
+ *   GET /v1/backup   POST /v1/backup/restores   POST|DELETE /v1/backup/restores/:id   (every project in one file, and back)
  *
  * Every /v1 route but assets needs the client token. The queue handler runs
  * generation jobs from the main queue and ends jobs the dead-letter queue
@@ -53,6 +54,7 @@ import { errorResponse, json, notFound } from "./http";
 import { cancelLegacyJob, createJob, getJob, retryLegacyJob } from "./routes/jobs";
 import { showJobFiles } from "./routes/job-files";
 import { createGroup, deleteGroup, listGroups, renameGroup } from "./routes/groups";
+import { cancelRestore, finishRestore, makeBackup, startRestore } from "./routes/backups";
 import { checkProjectFolder, getLibrary, linkFolder, setLibrary, unlinkFolder } from "./routes/folders";
 import { listEdgeKinds, listFormats } from "./routes/formats";
 import {
@@ -185,6 +187,11 @@ async function route(request: Request, deps: EngineDeps | undefined, ctx: Worker
   const group = /^\/v1\/groups\/([^/]+)$/.exec(path);
   if (group && method === "PATCH") return renameGroup(request, decodeURIComponent(group[1]!), deps);
   if (group && method === "DELETE") return deleteGroup(request, decodeURIComponent(group[1]!), deps);
+  if (path === "/v1/backup" && method === "GET") return makeBackup(request, deps, ctx);
+  if (path === "/v1/backup/restores" && method === "POST") return startRestore(request, deps);
+  const restore = /^\/v1\/backup\/restores\/([^/]+)$/.exec(path);
+  if (restore && method === "POST") return finishRestore(request, decodeURIComponent(restore[1]!), deps);
+  if (restore && method === "DELETE") return cancelRestore(request, decodeURIComponent(restore[1]!), deps);
   const folder = /^\/v1\/projects\/([^/]+)\/folder(\/check)?$/.exec(path);
   if (folder) {
     const id = decodeURIComponent(folder[1]!);

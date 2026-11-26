@@ -31,10 +31,12 @@ export class FakeR2Bucket implements R2BucketLike {
 
   async put(
     key: string,
-    value: ArrayBuffer | ArrayBufferView | string,
+    value: ArrayBuffer | ArrayBufferView | string | ReadableStream<Uint8Array>,
     options?: { httpMetadata?: { contentType?: string }; customMetadata?: Record<string, string> },
   ) {
-    const bytes = typeof value === "string"
+    const bytes = value instanceof ReadableStream
+      ? await new Response(value).arrayBuffer()
+      : typeof value === "string"
       ? (new TextEncoder().encode(value).buffer as ArrayBuffer)
       : value instanceof ArrayBuffer
         ? value

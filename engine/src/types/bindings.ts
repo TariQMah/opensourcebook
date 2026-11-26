@@ -55,7 +55,8 @@ export interface R2BucketLike {
   get(key: string, options?: { range?: R2RangeLike }): Promise<R2ObjectBodyLike | null>;
   put(
     key: string,
-    value: ArrayBuffer | ArrayBufferView | string,
+    /** A stream must be of a known length (a ranged get's body, a request's body sent with its length). */
+    value: ArrayBuffer | ArrayBufferView | string | ReadableStream<Uint8Array>,
     options?: { httpMetadata?: { contentType?: string }; customMetadata?: Record<string, string> },
   ): Promise<unknown>;
   head(key: string): Promise<R2ObjectHeadLike | null>;

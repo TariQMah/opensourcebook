@@ -6,6 +6,7 @@ import { MakeTimeRepository } from "./make-times";
 import { OutputRepository } from "./outputs";
 import { PlanRepository } from "./plans";
 import { ProjectRepository } from "./projects";
+import { ProjectRowsRepository } from "./project-rows";
 import { ProviderSettingsRepository } from "./provider-settings";
 import { ItemResultRepository } from "./results";
 import { repositoryContext, type RepositoryOptions } from "./shared";
@@ -27,6 +28,8 @@ export interface StudioRepositories {
   providerSettings: ProviderSettingsRepository;
   makeTimes: MakeTimeRepository;
   ownerSettings: OwnerSettingsRepository;
+  /** A project's rows as stored, for backups (backup/backup.ts). */
+  projectRows: ProjectRowsRepository;
 }
 
 export function createStudioRepositories(db: D1DatabaseLike, options: RepositoryOptions = {}): StudioRepositories {
@@ -44,6 +47,7 @@ export function createStudioRepositories(db: D1DatabaseLike, options: Repository
     providerSettings: new ProviderSettingsRepository(ctx),
     makeTimes: new MakeTimeRepository(ctx),
     ownerSettings: new OwnerSettingsRepository(ctx),
+    projectRows: new ProjectRowsRepository(ctx),
   };
 }
 

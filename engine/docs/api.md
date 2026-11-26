@@ -1124,6 +1124,50 @@ Only the asked bytes are read from storage, streamed as they are sent; an
 open range (`bytes=N-`) is the rest of the file.
 
 
+## Backing up every project (Nov 26, 2026; #66; local only)
+
+Every project in one zip file, and back (`src/backup/`). Only when the engine
+runs on the person's own computer (a deployed engine answers
+`501 this_computer_only`); the web app's proxy lets only the browser on that
+computer reach these routes, never a paired phone.
+
+| Route | Request | Response | Errors |
+|---|---|---|---|
+| `GET /v1/backup` | | `200` the zip, `content-disposition: attachment; filename="Open Sourcebook backup <YYYY-MM-DD>.zip"` | `501` |
+| `POST /v1/backup/restores` | the zip as the body | `201 { restore: { id, madeAt, projects } }` | `400 invalid_backup`, `400 backup_too_new`, `501` |
+| `POST /v1/backup/restores/:id` | `{ choices?: { <project id>: "keep-both" \| "replace" \| "skip" } }` | `200 { restored: [{ from, projectId, title, as }], skipped: [{ from, title }] }` | `400 invalid_request`, `404 restore_not_found`, `409 choice_needed`, `409 project_busy` |
+| `DELETE /v1/backup/restores/:id` | | `200 { id, cancelled: true }` | `404 restore_not_found` |
+
+- **What is in it.** `manifest.json` (`{ opensourcebook: "backup", version: 1,
+  madeAt, projects, groups, files }`), one `projects/<id>.json` a project
+  with every row of it as stored (the project, its sources and what was read
+  from them, its chats with their messages and the agent's turns, its plans
+  with their items, stages, days and results, and everything made), and
+  `files/assets/<id>` and `files/uploads/<id>`, the files those rows point
+  at (a video's, an audio's, pictures, uploaded files), byte for byte. Every
+  project is in it, archived ones too, and the folders on Home. Entries are
+  stored as they are, not compressed, so any zip program opens it.
+- **A linked folder's files are not in it.** They are read where they are;
+  the backup keeps the folder's path and each file's path, and restoring
+  points at the same paths (a file not there shows as missing when the
+  folder is checked).
+- **Restoring** is two steps. The file is sent and kept while the person
+  chooses; `restore.projects` lists each project with its counts and, when a
+  project with its id is here already, `here: { title }`. Then the choices
+  are sent: a project not here is added (with its ids, under this
+  computer's owner) unless it is `skip`ped; a project here needs
+  `keep-both` (a copy with new ids, titled `<title> (from backup)`, next to
+  the one here), `replace` (the one here is deleted, as `DELETE
+  /v1/projects/:id` does, and the backup's is put in its place) or `skip`.
+  Without a choice for one that is here nothing is written and the answer is
+  `409 choice_needed` with those `projects`. A project being made or
+  answered in is not replaced (`409 project_busy`). Nothing else is deleted.
+  A kept file already here is left as it is (it is the same file). A plan or
+  item that was running when the backup was made comes back stopped. A
+  folder on Home is matched by its name, and made when there is none. Once
+  finished or cancelled the file kept meanwhile goes; one left half done is
+  cleaned up a day later.
+
 ## A job's files on this computer
 
 `POST /v1/jobs/:id/files/show` opens the folder a job works in, in this
