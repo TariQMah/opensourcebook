@@ -135,9 +135,9 @@ export function ProvidersStep({ onNext, onConnected }: { onNext: () => void; onC
 
   const note =
     data && !data.connector.configured
-      ? "No agent connector is set up, so there is nothing to connect yet. Start Open Sourcebook again from your terminal."
+      ? "No agent connector is set up, so there is nothing to connect yet. Close Open Sourcebook and open it again from its shortcut."
       : data && !data.connector.reachable
-        ? "Open Sourcebook can't reach the connector that runs your agents. Start it again from your terminal, then press Check again."
+        ? "Open Sourcebook can't reach the connector that runs your agents. Close Open Sourcebook and open it again from its shortcut, then press Check again."
         : undefined;
 
   return (

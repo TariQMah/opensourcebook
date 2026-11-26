@@ -8,11 +8,13 @@ import { Icon } from "../design/Icon";
 import { Logo } from "../design/ui";
 import { firstStep } from "./rules";
 import { ProvidersStep } from "./ProvidersStep";
+import { SetupStep } from "./SetupStep";
 import { TryStep } from "./TryStep";
 import { VoiceStep } from "./VoiceStep";
 import "./firstrun.css";
 
 const STEPS = [
+  { id: "setup", label: "Get set up" },
   { id: "providers", label: "Providers" },
   { id: "voice", label: "Voice" },
   { id: "try", label: "Try it" },
@@ -37,7 +39,7 @@ function Stepper({ at }: { at: number }) {
 }
 
 /**
- * First-time setup at `/welcome/:step`: providers, voice, try it. What the
+ * First-time setup at `/welcome/:step`: get set up, providers, voice, try it. What the
  * engine says is set decides the first step; the address says the rest, so
  * a refresh stays where it is. Nothing is kept here that the engine does not
  * keep (`GET /v1/setup`).
@@ -60,8 +62,8 @@ export function FirstRun() {
   const count = connected ?? setup.data.providers.connected;
   const known = STEPS.find((s) => s.id === step);
   if (!known) return <Navigate replace to={`/welcome/${firstStep(setup.data)}`} />;
-  // A later step needs an agent; a person who has none is taken back to the first.
-  if (known.id !== "providers" && count === 0) return <Navigate replace to="/welcome/providers" />;
+  // A step after connecting needs an agent; a person who has none is taken back to Get set up.
+  if (known.id !== "setup" && known.id !== "providers" && count === 0) return <Navigate replace to="/welcome/setup" />;
   const at = STEPS.findIndex((s) => s.id === known.id);
   const go = (id: StepId) => navigate(`/welcome/${id}`);
 
@@ -71,11 +73,14 @@ export function FirstRun() {
         <Link to="/" className="fr-logo-link" aria-label="Open Sourcebook home">
           <Logo />
         </Link>
-        <span className="fr-of">Step {at + 1} of 3</span>
+        <span className="fr-of">
+          Step {at + 1} of {STEPS.length}
+        </span>
       </header>
       <main className="fr-main">
         <div className="fr-col">
           <Stepper at={at} />
+          {known.id === "setup" && <SetupStep onNext={() => go("providers")} />}
           {known.id === "providers" && <ProvidersStep onConnected={setConnected} onNext={() => go("voice")} />}
           {known.id === "voice" && <VoiceStep onBack={() => go("providers")} onNext={() => go("try")} />}
           {known.id === "try" && <TryStep onBack={() => go("voice")} />}

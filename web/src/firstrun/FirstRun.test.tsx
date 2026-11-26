@@ -48,13 +48,18 @@ describe("the redirect rules", () => {
   });
 
   it("returns a person to the first step still to do", () => {
-    expect(firstStep(fresh)).toBe("providers");
+    expect(firstStep(fresh)).toBe("setup");
     expect(firstStep(setupOf({ providers: { connected: 2, ready: 1 }, voice: { set: false, skipped: false } }))).toBe("voice");
     expect(firstStep(setupOf({ providers: { connected: 2, ready: 1 }, voice: { set: false, skipped: true } }))).toBe("try");
   });
 
-  it("opens a fresh install on step 1 instead of Home", async () => {
-    renderApp("/", engineWith(fresh));
+  it("opens a fresh install on step 1, Get set up, instead of Home, and goes on to connecting once an agent is ready", async () => {
+    renderApp("/", engineWith(fresh, found, { "GET /launcher/setup": { agents: [], ffmpeg: { found: true, fetch: { state: "idle" } } } }));
+    expect(await screen.findByRole("heading", { name: "Get set up" })).toBeInTheDocument();
+    expect(screen.getByRole("list", { name: "What this computer needs" })).toBeInTheDocument();
+    const next = screen.getByRole("button", { name: "Next" });
+    await waitFor(() => expect(next).toBeEnabled());
+    await userEvent.click(next);
     expect(await screen.findByRole("heading", { name: /Connect (the|your) coding agent/ })).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "Your projects" })).not.toBeInTheDocument();
   });
@@ -79,7 +84,7 @@ describe("the redirect rules", () => {
 
   it("sends a later step back to the first while no agent is connected", async () => {
     renderApp("/welcome/voice", engineWith(fresh));
-    expect(await screen.findByRole("heading", { name: /Connect (the|your) coding agent/ })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Get set up" })).toBeInTheDocument();
   });
 });
 

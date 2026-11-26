@@ -16,8 +16,8 @@ export function voicePassed(state: SetupState): boolean {
 }
 
 /** Which step a person is on: the first one still to do. */
-export function firstStep(state: SetupState): "providers" | "voice" | "try" {
-  if (state.providers.connected === 0) return "providers";
+export function firstStep(state: SetupState): "setup" | "voice" | "try" {
+  if (state.providers.connected === 0) return "setup";
   return state.voice.skipped && !state.voice.set ? "try" : "voice";
 }
 
