@@ -2,7 +2,7 @@
 
 A video's narration and audio need a voice, and a voice needs one of two things: a key for a voice service, or Kokoro, a free voice that runs on your computer. Without either, a video is made without sound on every system and its captions carry the words; Open Sourcebook says so at start, before a video is made and on the video. Audio cannot be made then.
 
-**In the app.** First-time setup has a Voice step, and Settings > Voice picks a service, takes its key once (the page never shows it back, only that one is set and its last four characters), and plays a sample of each voice before you choose. The choice is kept in `.opensourcebook/voice.json` in the app's folder, a private file on this computer, and it wins over `services/scenes/.env`, which still works.
+**In the app.** First-time setup's Get set up list sets up the free voice with one button (installed, then made the voice in use) and shows a hosted service's steps to getting a key, what it costs among them; it has a Voice step, and Settings > Voice picks a service, takes its key once (the page never shows it back, only that one is set and its last four characters), and plays a sample of each voice before you choose. The choice is kept in `.opensourcebook/voice.json` in the app's folder, a private file on this computer, and it wins over `services/scenes/.env`, which still works.
 
 **A key in a file instead.** Put `ELEVENLABS_API_KEY=<your key>` in `services/scenes/.env` in the app's folder (copy `services/scenes/.env.example`).
 
