@@ -157,6 +157,8 @@ export async function proxy(
   if (!url.pathname.startsWith(PREFIX + "v1/")) return error(404, "not_found", "No such route.");
   // Opening a folder in the file manager is for the person at this computer, never a paired phone.
   if (who !== "browser" && opensFiles(url.pathname)) return error(403, "this_computer_only", "A job's files open only in the browser on the computer Open Sourcebook runs on.");
+  // Naming a folder on this computer (a project's linked folder, the library) is for the person at it, never a phone.
+  if (who !== "browser" && namesFolder(request.method, url.pathname)) return error(403, "this_computer_only", "A folder is picked only in the browser on the computer Open Sourcebook runs on.");
   if (!METHODS.has(request.method)) return error(405, "method_not_allowed", "Method not allowed.");
   if (request.method !== "GET" && request.method !== "HEAD" && crossSite(request, url)) {
     return error(403, "cross_site", "Requests must come from this site.");
@@ -203,6 +205,19 @@ function opensFiles(path: string): boolean {
     // A path that does not decode is judged as it is.
   }
   return /\/files\/show/i.test(plain);
+}
+
+/** Whether a request names a folder on this computer: linking a project to one or unlinking it, or picking the library. */
+function namesFolder(method: string, path: string): boolean {
+  if (method === "GET" || method === "HEAD") return false;
+  let plain = path;
+  try {
+    plain = decodeURIComponent(path);
+  } catch {
+    // A path that does not decode is judged as it is.
+  }
+  plain = plain.replace(/\/+$/, "").toLowerCase();
+  return /\/v1\/projects\/[^/]+\/folder$/.test(plain) || /\/v1\/library$/.test(plain);
 }
 
 /** Where `/api/open` goes once the browser is in: a path of this app, never another site. */

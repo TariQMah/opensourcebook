@@ -195,6 +195,22 @@ describe("who may use the engine through this proxy", () => {
     expect(calls.map((c) => c.url)).toEqual(["http://engine.test/v1/jobs/j1/files/show"]);
   });
 
+  test("a folder on this computer is named only by this computer's browser: the door may not link one or pick the library", async () => {
+    const { calls, fetchImpl } = engine(200, { project: {} });
+    const door = { "x-opensourcebook-door": "door-key-of-this-run" };
+    const refused: Array<[string, string]> = [["PUT", "/api/v1/projects/p1/folder"], ["DELETE", "/api/v1/projects/p1/folder/"], ["PUT", "/api/v1/projects/p1/FOLDER"], ["PUT", "/api/v1/projects/p1%2Ffolder"], ["PUT", "/api/v1/library"]];
+    for (const [method, path] of refused) {
+      const res = await proxy(new Request(`${at}${path}`, { method, headers: { ...door, ...browser } }), run, fetchImpl);
+      expect(res.status, `${method} ${path}`).toBe(403);
+    }
+    expect(calls).toHaveLength(0);
+    const read = await proxy(new Request(`${at}/api/v1/library`, { headers: { ...door, ...browser } }), run, fetchImpl);
+    expect(read.status).not.toBe(403);
+    const res = await proxy(new Request(`${at}/api/v1/projects/p1/folder`, { method: "PUT", headers: { ...browser, origin: at, "content-type": "application/json" }, body: "{}" }), run, fetchImpl);
+    expect(res.status).toBe(200);
+    expect(calls.at(-1)!.url).toBe("http://engine.test/v1/projects/p1/folder");
+  });
+
   test("the launcher's own check holds the engine token and reaches the engine, not the phone", async () => {
     const { fetchImpl } = engine();
     const tool = { authorization: "Bearer secret-token" };

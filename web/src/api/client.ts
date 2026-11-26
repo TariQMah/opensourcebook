@@ -42,6 +42,8 @@ import type {
   Progress,
   ProgressItem,
   Project,
+  FolderCheck,
+  Library,
   ProjectCounts,
   PlanDeleted,
   ProjectDeleted,
@@ -196,6 +198,26 @@ export class ApiClient {
   /** A new project from a project bundle (engine/docs/api.md, "A project as one file"); `example` names the examples/ folder it came from. */
   async importProject(bundle: unknown, example?: string): Promise<Project> {
     return (await this.request<{ project: Project }>("POST", "/v1/projects/import", { json: { bundle, ...(example ? { example } : {}) } })).project;
+  }
+  /** Links a project to a folder on this computer and looks at it at once; only the browser on this computer may. */
+  linkFolder(id: string, path: string): Promise<{ project: Project; check: FolderCheck }> {
+    return this.request("PUT", `/v1/projects/${enc(id)}/folder`, { json: { path } });
+  }
+  /** Unlinks a project's folder; its sources stay. */
+  async unlinkFolder(id: string): Promise<Project> {
+    return (await this.request<{ project: Project }>("DELETE", `/v1/projects/${enc(id)}/folder`)).project;
+  }
+  /** Looks at a linked folder again: new files added, changed ones read again, removed ones marked missing. */
+  checkFolder(id: string): Promise<{ project: Project; check: FolderCheck }> {
+    return this.request("POST", `/v1/projects/${enc(id)}/folder/check`);
+  }
+  /** The folder finished videos are copied into. */
+  async library(): Promise<Library> {
+    return (await this.request<{ library: Library }>("GET", "/v1/library")).library;
+  }
+  /** Picks the library folder; `null` goes back to the usual one. */
+  async setLibrary(folder: string | null): Promise<Library> {
+    return (await this.request<{ library: Library }>("PUT", "/v1/library", { json: { folder } })).library;
   }
   /** Deletes a project for good, with everything in it; `409 project_busy` while a plan in it runs. */
   deleteProject(id: string): Promise<ProjectDeleted> {

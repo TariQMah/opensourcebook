@@ -443,3 +443,14 @@
 /* A teach-back: the person's points grouped right, left out and wrong, each group marked by its colour and sign. */
 /* A mind map: ideas round the central one, the open idea's sentence, cites and links below. */
 /* Narrower than this, the map scrolls sideways on its own, as a wide table does, rather than piling names on each other. */
+
+/* A project linked to a folder on this computer (FolderLink.tsx). */
+.folderlink { flex: none; display: flex; flex-wrap: wrap; align-items: center; gap: 6px var(--space-8); padding: 0 var(--space-12) 10px; font-size: 12.5px; color: var(--mutedText); }
+.folderlink.quiet { margin: 0; }
+.folderlink .fl-path { margin: 0; min-width: 0; flex: 1 1 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.folderlink .fl-path code { font-family: var(--font-mono); font-size: 12px; color: var(--text); }
+.folderlink .fl-acts { display: inline-flex; align-items: center; gap: var(--space-8); }
+.folderlink .fl-found { margin: 0; flex: 1 1 100%; }
+.folderfield { display: flex; flex-wrap: wrap; align-items: center; gap: 6px var(--space-8); width: 100%; }
+.folderfield input { flex: 1 1 200px; min-width: 0; font: inherit; font-family: var(--font-mono); font-size: 12px; padding: 4px 8px; border: 1px solid var(--border); border-radius: var(--r-sm, 6px); background: var(--surface); color: var(--text); }
+.folderfield small { flex: 1 1 100%; color: var(--mutedText); }

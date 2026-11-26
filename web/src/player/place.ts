@@ -108,7 +108,8 @@ export function useSources(output: Output | undefined): SourceRef[] {
   const loaded = useLoad(() => Promise.all(ids.map((sid) => client.getSource(sid).then((d) => d, () => undefined))), [client, key]);
   return ids.map((sid) => {
     const d = loaded.data?.find((x) => x?.source.id === sid);
-    // A removed source still opens, and says so.
-    return { id: sid, name: d ? `${d.source.title}${d.source.removedAt ? " (removed)" : ""}` : "A source" };
+    // A removed source still opens, and says so; so does one whose file changed after this was made (a linked folder's).
+    const changed = d?.source.changedAt && output && d.source.changedAt > output.createdAt;
+    return { id: sid, name: d ? `${d.source.title}${d.source.removedAt ? " (removed)" : changed ? " (its file changed since)" : ""}` : "A source" };
   });
 }

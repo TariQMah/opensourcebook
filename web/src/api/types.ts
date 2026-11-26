@@ -107,6 +107,28 @@ export interface Project {
   createdAt: string;
   updatedAt: string;
   archivedAt?: string;
+  /** The folder on this computer the project is linked to: its files are sources read where they are. */
+  folder?: string;
+  /** When the linked folder was last looked at. */
+  folderCheckedAt?: string;
+}
+
+/** What one look at a linked folder found, by each file's path from the folder (engine/docs/api.md). */
+export interface FolderCheck {
+  folder: string;
+  added: string[];
+  changed: string[];
+  missing: string[];
+  unchanged: number;
+  failed: Array<{ path: string; message: string }>;
+  skipped: number;
+  more: boolean;
+}
+
+/** The folder finished videos are copied into, and whether the person picked it. */
+export interface Library {
+  folder: string;
+  chosen: boolean;
 }
 
 export interface ProjectInput {
@@ -144,6 +166,12 @@ export interface Source {
   updatedAt: string;
   /** Set only on a removed source something still points at; lists never show one, reading it by id does. */
   removedAt?: string;
+  /** A file of the project's linked folder: its whole path on this computer. */
+  filePath?: string;
+  /** The file was not in the folder at the last look; the source keeps what was read from it. */
+  missingAt?: string;
+  /** When it was last read again because the file changed. */
+  changedAt?: string;
 }
 
 export type AccessLevel = "full" | "partial" | "metadata" | "none" | (string & {});
@@ -558,6 +586,8 @@ export interface Output extends OutputSummary {
   remakesScene?: boolean;
   /** It is a remake of one scene of that output. */
   remakeOf?: { outputId: string; scene: string };
+  /** Passages it cites that changed in their file since (a linked folder's file read again). */
+  changedChunks?: string[];
 }
 
 // Chats (engine/docs/api.md, "Chats")

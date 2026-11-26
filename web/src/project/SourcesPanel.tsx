@@ -12,6 +12,7 @@ import { readableFiles } from "../sources/fileTypes";
 import { RemoveSource, RenameSource, SourceMenu } from "../sources/SourceActions";
 import { useRetrySource, useSourceNotes } from "../sources/useSourceNotes";
 import { extractionText, readMark } from "../sources/sourceText";
+import { FolderLink } from "./FolderLink";
 import { usable } from "./ticks";
 
 /** The project's sources: tick what the chat may use, add more, open one beside the chat. */
@@ -25,6 +26,7 @@ export function SourcesPanel({
   setUnselected,
   onOpen,
   onRemoved,
+  onFolderChanged,
 }: {
   project: Project;
   sources: Source[];
@@ -36,6 +38,8 @@ export function SourcesPanel({
   onOpen: (id: string) => void;
   /** A source was removed: plans that read it may have changed. */
   onRemoved?: (result: SourceRemoved) => void;
+  /** The project's linked folder was linked, unlinked or looked at: the project and its sources may have changed. */
+  onFolderChanged?: () => Promise<void>;
 }) {
   const client = useApi();
   const [adding, setAdding] = useState(false);
@@ -123,6 +127,7 @@ export function SourcesPanel({
           )}
         </div>
       )}
+      <FolderLink project={project} onChanged={() => (onFolderChanged ? onFolderChanged() : reload())} />
       <div className="sc">
         <input ref={fileInput} type="file" multiple hidden aria-label="Files" onChange={(e) => void upload(Array.from(e.target.files ?? []))} />
         {open && adding && (
@@ -195,6 +200,11 @@ export function SourcesPanel({
                   {mark && (
                     <small className="mark" title={note?.limitations?.join(" ")}>
                       {mark}
+                    </small>
+                  )}
+                  {s.missingAt && (
+                    <small className="mark" title={s.filePath}>
+                      Not in the folder any more
                     </small>
                   )}
                   {open && failed && retrying !== s.id && (

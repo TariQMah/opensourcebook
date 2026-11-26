@@ -209,6 +209,9 @@ function ProjectView({ id }: { id: string }) {
             setUnselected={changeTicks}
             onOpen={(sid) => setParam("source", sid)}
             onRemoved={(r) => r.changedPlanIds.length > 0 && void plans.reload()}
+            onFolderChanged={async () => {
+              await Promise.all([project.reload(), sources.reload()]);
+            }}
           />
         )}
         <ChatPanel
