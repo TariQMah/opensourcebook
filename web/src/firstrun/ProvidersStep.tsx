@@ -176,7 +176,8 @@ export function ProvidersStep({ onNext, onConnected }: { onNext: () => void; onC
           {list.map((p) => {
             const on = isConnected(p);
             const expanded = open.includes(p.id);
-            const howTo = on ? p.state === "signedOut" && !!p.signIn : expanded;
+            // Installed but not signed in: the one thing left, signing in, shows at once, connected or not.
+            const howTo = p.state === "signedOut" ? !!p.signIn : !on && expanded;
             return (
               <li key={p.id}>
                 <div className="fr-row">

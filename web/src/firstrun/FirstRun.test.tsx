@@ -88,7 +88,7 @@ describe("step 1: providers", () => {
     expect(byName(found.providers).map((p) => p.label)).toEqual(["Antigravity", "Claude Code", "Cursor"]);
     renderApp("/welcome/providers", engineWith(fresh));
     await screen.findByRole("button", { name: "Connect Claude Code" });
-    const rows = within(screen.getByRole("list", { name: "Coding agents" })).getAllByRole("listitem");
+    const rows = [...screen.getByRole("list", { name: "Coding agents" }).children];
     expect(rows.map((r) => r.querySelector("b")?.textContent)).toEqual(["Antigravity", "Claude Code", "Cursor"]);
     expect(screen.getByRole("button", { name: "Connect Claude Code" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Connect Cursor" })).toBeInTheDocument();
@@ -117,6 +117,29 @@ describe("step 1: providers", () => {
     await waitFor(() => expect(calls.some((c) => c.path === "/v1/providers" && c.query.get("fresh") === "1")).toBe(true));
     // Still not found after the check: it says plainly that a restart is what is left.
     expect(await within(how).findByRole("status")).toHaveTextContent("If you just installed it, close Open Sourcebook and open it again");
+  });
+
+  it("shows each of the three states apart: ready to connect, installed but not signed in with its sign-in, not installed with its install", async () => {
+    renderApp("/welcome/providers", engineWith(fresh));
+    const row = async (label: string) => (await screen.findByText(label, { selector: "b" })).closest("li")!;
+
+    const ready = await row("Claude Code");
+    expect(ready).toHaveTextContent("Found on this computer, signed in");
+    expect(within(ready).getByRole("button", { name: "Connect Claude Code" })).toBeInTheDocument();
+    expect(within(ready).queryByRole("group")).not.toBeInTheDocument();
+
+    const signedOut = await row("Cursor");
+    expect(signedOut).toHaveTextContent("Found on this computer · not signed in yet");
+    const signIn = within(signedOut).getByRole("group", { name: "How to connect Cursor" });
+    expect(signIn).toHaveTextContent("Sign in to Cursor");
+    expect(within(signIn).getByText("cur login")).toBeInTheDocument();
+    expect(signIn).not.toHaveTextContent("Install it");
+
+    const missing = await row("Antigravity");
+    expect(missing).toHaveTextContent("Not found on this computer");
+    expect(within(missing).queryByRole("button", { name: "Connect Antigravity" })).not.toBeInTheDocument();
+    await userEvent.click(within(missing).getByRole("button", { name: "How to connect Antigravity" }));
+    expect(within(missing).getByText("npm i -g agy")).toBeInTheDocument();
   });
 
   it("links the install page when the agent has no command", async () => {
