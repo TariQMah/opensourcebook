@@ -7,6 +7,9 @@ import { ProviderMark } from "../design/ProviderMark";
 import { Switch } from "../design/ui";
 import { aToZ } from "../make/makerKey";
 import { said, tone } from "../project/providers";
+import { AgentButton, AgentNotes } from "../setup/AgentFix";
+import { agentStatus } from "../setup/agentStatus";
+import { useLauncherSetup, type Launcher } from "../setup/useLauncherSetup";
 import { SectionHead } from "./settings/SectionHead";
 import { useNarrow } from "./settings/useNarrow";
 
@@ -45,6 +48,8 @@ export function ProvidersSettings({
 }) {
   const [adding, setAdding] = useState(false);
   const narrow = useNarrow();
+  // The same buttons as Get set up's; what one finished is looked for at once.
+  const launcher = useLauncherSetup(() => onCheck());
   const head = (body: ReactNode) => (
     <>
       <SectionHead
@@ -85,7 +90,7 @@ export function ProvidersSettings({
           <Icon name="chev-l" />
           Providers
         </button>
-        <ProviderDetail key={chosen.id} provider={chosen} chatPick={chat === chosen.id} checking={checking} onChange={(patch) => onChange(chosen.id, patch)} onCheck={onCheck} />
+        <ProviderDetail key={chosen.id} provider={chosen} launcher={launcher} chatPick={chat === chosen.id} checking={checking} onChange={(patch) => onChange(chosen.id, patch)} onCheck={onCheck} />
       </>
     );
   }
@@ -125,7 +130,7 @@ export function ProvidersSettings({
             </button>
           </div>
           {narrow ? null : chosen ? (
-            <ProviderDetail key={chosen.id} provider={chosen} chatPick={chat === chosen.id} checking={checking} onChange={(patch) => onChange(chosen.id, patch)} onCheck={onCheck} />
+            <ProviderDetail key={chosen.id} provider={chosen} launcher={launcher} chatPick={chat === chosen.id} checking={checking} onChange={(patch) => onChange(chosen.id, patch)} onCheck={onCheck} />
           ) : (
             <div className="pv-detail" />
           )}
@@ -134,6 +139,7 @@ export function ProvidersSettings({
       {adding && (
         <AddProvider
           offered={offered}
+          launcher={launcher}
           checking={checking}
           onCheck={onCheck}
           onCancel={() => setAdding(false)}
@@ -156,65 +162,43 @@ function ago(at: string): string {
   return `${Math.round(s / 3600)}h ago`;
 }
 
-function Command({ text }: { text: string }) {
-  return (
-    <div className="pv-cmd">
-      <code>{text}</code>
-      <button className="mini" type="button" onClick={() => void navigator.clipboard?.writeText(text)}>
-        <Icon name="copy" />
-        Copy
-      </button>
-    </div>
-  );
-}
-
 /**
- * How to connect a provider that can't answer: what is wrong, then the
- * steps its adapter gives (install it, when it isn't installed; sign in
- * once with its own command) and a check-again.
+ * What a provider that can't answer needs: what is wrong, then its button (Install, Get it from its own page, or Sign
+ * in, the same as Get set up's, `../setup/AgentFix.tsx`), what that button is doing, and a check-again.
  */
-function Setup({ provider: p, checking, onCheck }: { provider: Provider; checking: boolean; onCheck: () => void }) {
+function Setup({ provider: p, launcher, checking, onCheck }: { provider: Provider; launcher: Launcher; checking: boolean; onCheck: () => void }) {
   if (p.state === "ready") return null;
-  const install = p.state === "missing" ? p.install : undefined;
+  const fix = { p, launcher, onCheck, checking, checkHere: false };
+  const a = launcher.of(p.id);
   return (
-    <div className="pv-setup">
-      <p>{p.detail ?? p.headline}</p>
-      {(install || p.signIn) && (
-        <ol className="pv-how" aria-label={`How to connect ${p.label}`}>
-          {install && (
-            <li>
-              {install.command ? "Install it:" : "Install it from "}
-              {install.command ? (
-                <Command text={install.command} />
-              ) : (
-                <a href={install.url} target="_blank" rel="noreferrer">
-                  its install page
-                </a>
-              )}
-              {install.command && (
-                <a href={install.url} target="_blank" rel="noreferrer">
-                  Its install page
-                </a>
-              )}
-            </li>
-          )}
-          {p.signIn && (
-            <li>
-              Sign in once in a terminal:
-              <Command text={p.signIn} />
-            </li>
-          )}
-          <li>Come back here and press Check again.</li>
-        </ol>
-      )}
-      <button className="mini" type="button" disabled={checking} onClick={onCheck}>
-        {checking ? "Checking…" : "Check again"}
-      </button>
+    <div className="pv-setup" role="group" aria-label={`Set up ${p.label}`}>
+      <p>{p.state === "missing" && a?.appFound ? `${agentStatus(p, a)}.` : (p.detail ?? p.headline)}</p>
+      <div className="pv-fix">
+        <AgentButton {...fix} />
+        <button className="mini" type="button" disabled={checking} onClick={onCheck}>
+          {checking ? "Checking…" : "Check again"}
+        </button>
+      </div>
+      <AgentNotes {...fix} />
     </div>
   );
 }
 
-function ProviderDetail({ provider: p, chatPick, checking, onChange, onCheck }: { provider: Provider; chatPick: boolean; checking: boolean; onChange: (patch: ProviderPatch) => Promise<void>; onCheck: () => void }) {
+function ProviderDetail({
+  provider: p,
+  launcher,
+  chatPick,
+  checking,
+  onChange,
+  onCheck,
+}: {
+  provider: Provider;
+  launcher: Launcher;
+  chatPick: boolean;
+  checking: boolean;
+  onChange: (patch: ProviderPatch) => Promise<void>;
+  onCheck: () => void;
+}) {
   const [filter, setFilter] = useState("");
   const q = filter.trim().toLowerCase();
   const models = p.models.filter((m) => !q || `${m.label} ${m.id}`.toLowerCase().includes(q));
@@ -246,12 +230,12 @@ function ProviderDetail({ provider: p, chatPick, checking, onChange, onCheck }: 
             <p className="pv-d">
               {p.state === "ready"
                 ? (p.detail ?? `Signed in on your computer. ${p.label} answers with your own account; Open Sourcebook never holds its credentials.`)
-                : `Sign in on your computer with the command below, then check again.`}
+                : `Not signed in on this computer yet. Sign in below, then check again.`}
             </p>
           </section>
         )}
       </div>
-      <Setup provider={p} checking={checking} onCheck={onCheck} />
+      <Setup provider={p} launcher={launcher} checking={checking} onCheck={onCheck} />
 
       <section className="pv-sec" aria-label="Models">
         <div className="pv-sech">
@@ -330,12 +314,14 @@ function ProviderDetail({ provider: p, chatPick, checking, onChange, onCheck }: 
  */
 function AddProvider({
   offered,
+  launcher,
   checking,
   onCheck,
   onCancel,
   onAdd,
 }: {
   offered: Provider[];
+  launcher: Launcher;
   checking: boolean;
   onCheck: () => void;
   onCancel: () => void;
@@ -403,7 +389,7 @@ function AddProvider({
                 </span>
               </div>
               {picked.state === "ready" && <p className="pv-d">{picked.detail ?? "Installed and signed in on your computer. Ready to answer."}</p>}
-              <Setup provider={picked} checking={checking} onCheck={onCheck} />
+              <Setup provider={picked} launcher={launcher} checking={checking} onCheck={onCheck} />
             </div>
           )
         )}

@@ -18,8 +18,8 @@ const agents = (states: Record<string, Provider["state"]>): Providers => ({
 const idle = { state: "idle" as const };
 const launcherOf = (over: Partial<Record<"alpha" | "beta", Partial<LauncherSetup["agents"][number]>>> = {}, ffmpeg = true): LauncherSetup => ({
   agents: [
-    { id: "alpha", label: "Alpha", canInstall: true, canSignIn: true, install: idle, signIn: idle, ...over.alpha },
-    { id: "beta", label: "Beta", canInstall: false, canSignIn: false, install: idle, signIn: idle, ...over.beta },
+    { id: "alpha", label: "Alpha", canInstall: true, how: "npm", canSignIn: true, install: idle, signIn: idle, ...over.alpha },
+    { id: "beta", label: "Beta", canInstall: false, how: "page", page: "https://beta.example/get", canSignIn: false, install: idle, signIn: idle, ...over.beta },
   ],
   ffmpeg: { found: ffmpeg, fetch: idle },
 });
@@ -62,14 +62,15 @@ test("no agent: a button installs the one that can be, says it is installing, an
   });
   const agentRow = await vi.waitFor(() => row("A coding agent"));
   expect(await within(agentRow).findByText(/None is installed yet/)).toBeInTheDocument();
-  // Only an agent whose adapter says how is installed with a button.
+  // Only an agent whose adapter says how is installed with a button; the other has its own page a button away.
   expect(within(agentRow).queryByRole("button", { name: "Install Beta" })).not.toBeInTheDocument();
+  expect(within(agentRow).getByRole("link", { name: "Get Beta" })).toHaveAttribute("href", "https://beta.example/get");
   await userEvent.click(within(agentRow).getByRole("button", { name: "Install Alpha" }));
   expect(await within(agentRow).findByText(/Installing Alpha/)).toBeInTheDocument();
   expect(await screen.findByText("Alpha is installed.", {}, { timeout: 8000 })).toBeInTheDocument();
   // Installed but not signed in is its own state, with its own button.
-  expect(screen.getByText("Alpha is installed but not signed in.")).toBeInTheDocument();
-  expect(within(row("Signed in")).getByRole("button", { name: "Sign in to Alpha" })).toBeInTheDocument();
+  expect(screen.getByText(/^Alpha is installed but not signed in\./)).toBeInTheDocument();
+  expect(within(row("A coding agent")).getByRole("button", { name: "Sign in to Alpha" })).toBeInTheDocument();
 }, 15000);
 
 test("installed but not signed in: Sign in starts the agent's own sign-in, shows its page's address, and connects the agent once it is signed in", async () => {
@@ -85,8 +86,8 @@ test("installed but not signed in: Sign in starts the agent's own sign-in, shows
     "POST /launcher/agents/:id/sign-in": [202, { state: "signingIn", since: "now" }],
     "PATCH /v1/providers/:id": (req: FakeRequest) => ({ ...agents({ alpha: "ready" }), patched: req.body }),
   });
-  const signIn = await vi.waitFor(() => row("Signed in"));
-  expect(await within(signIn).findByText("Alpha and Beta are installed but not signed in.")).toBeInTheDocument();
+  expect(await within(await vi.waitFor(() => row("Signed in"))).findByText(/^Alpha and Beta are installed but not signed in\./)).toBeInTheDocument();
+  const signIn = row("A coding agent");
   // One the launcher can't sign in to says the command, plainly.
   expect(within(signIn).getByText("beta login")).toBeInTheDocument();
   await userEvent.click(within(signIn).getByRole("button", { name: "Sign in to Alpha" }));
@@ -101,7 +102,7 @@ test("a sign-in that did not finish says so, with the button to try again", asyn
     "GET /launcher/setup": launcherOf({ alpha: { signIn: { state: "failed", message: "Alpha's sign-in closed before it finished. Press Sign in to try again." } } }),
   });
   expect(await screen.findByRole("alert")).toHaveTextContent("Alpha's sign-in closed before it finished.");
-  expect(screen.getByRole("button", { name: "Sign in to Alpha again" })).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Sign in to Alpha" })).toHaveTextContent("Sign in again");
 });
 
 test("no ffmpeg: Get ffmpeg asks the launcher for it", async () => {
@@ -139,6 +140,51 @@ test("no voice: the free voice is installed by the launcher and made the voice i
 
 test("without the launcher, an agent's own install page is offered instead of a button", async () => {
   renderWithEngine(<GetSetUp />, { "GET /v1/providers": agents({}), "GET /launcher/setup": [502, { error: "launcher_unreachable", message: "The launcher did not answer." }] });
-  expect(await screen.findByRole("link", { name: "Alpha" })).toHaveAttribute("href", "https://alpha.example");
+  expect(await screen.findByRole("link", { name: "Get Alpha" })).toHaveAttribute("href", "https://alpha.example");
   expect(screen.getByText("Can't be checked from this page.")).toBeInTheDocument();
+});
+
+test("every agent has its row with a button: Install, Get it from its page, or Sign in", async () => {
+  renderWithEngine(<GetSetUp />, {
+    "GET /v1/providers": agents({ alpha: "signedOut" }),
+    "GET /launcher/setup": launcherOf(),
+  });
+  const list = await screen.findByRole("list", { name: "Coding agents" });
+  expect(within(list).getAllByRole("listitem")).toHaveLength(2);
+  expect(within(list).getByRole("button", { name: "Sign in to Alpha" })).toBeInTheDocument();
+  expect(within(list).getByRole("link", { name: "Get Beta" })).toBeInTheDocument();
+});
+
+test("an agent whose maker's app is here but not its program says so, with its Install button", async () => {
+  renderWithEngine(<GetSetUp />, {
+    "GET /v1/providers": agents({ alpha: "ready" }),
+    "GET /launcher/setup": launcherOf({ beta: { canInstall: true, how: "script", appFound: "Beta Studio" } }),
+    "POST /launcher/agents/:id/install": [202, { state: "installing", since: "now" }],
+  });
+  const list = await screen.findByRole("list", { name: "Coding agents" });
+  expect(await within(list).findByText("Beta Studio app found; Open Sourcebook needs its command-line part")).toBeInTheDocument();
+  expect(within(list).getByRole("button", { name: "Install Beta" })).toBeInTheDocument();
+});
+
+test("an agent installing with its own installer says so", async () => {
+  renderWithEngine(<GetSetUp />, {
+    "GET /v1/providers": agents({ alpha: "ready" }),
+    "GET /launcher/setup": launcherOf({ beta: { canInstall: true, how: "script", install: { state: "installing", since: "now" } } }),
+  });
+  expect(await screen.findByText(/Running Beta's own installer…/)).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Installing Beta" })).toBeDisabled();
+});
+
+test("a sign-in shows the code to enter on its page, and one that asks for a pasted code has a box that sends it", async () => {
+  const { calls } = renderWithEngine(<GetSetUp />, {
+    "GET /v1/providers": agents({ alpha: "signedOut" }),
+    "GET /launcher/setup": launcherOf({ alpha: { signIn: { state: "signingIn", since: "now", url: "https://login.alpha.example/start", deviceCode: "AB12-CD34", asksCode: true } } }),
+    "POST /launcher/agents/:id/sign-in/code": { state: "signingIn", since: "now" },
+  });
+  expect(await screen.findByText("AB12-CD34")).toBeInTheDocument();
+  const box = screen.getByRole("textbox", { name: "The code from Alpha's sign-in page" });
+  await userEvent.type(box, "  pasted#code  ");
+  await userEvent.click(screen.getByRole("button", { name: "Send" }));
+  await vi.waitFor(() => expect(calls.find((c) => c.method === "POST" && c.path === "/launcher/agents/alpha/sign-in/code")?.body).toEqual({ code: "pasted#code" }));
+  expect(await screen.findByText("Sent. It finishes in a moment.")).toBeInTheDocument();
 });

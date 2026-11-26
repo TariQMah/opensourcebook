@@ -144,15 +144,28 @@ test("turns a provider off, hides and stars a model, keeping what the engine ans
   expect(await within(section).findByRole("switch", { name: "Use Codex" })).toHaveAttribute("aria-checked", "false");
 });
 
-test("shows a signed-out provider's sign-in command as a step, and checks again fresh", async () => {
+test("a signed-out provider the launcher can't sign in to shows its sign-in command, and checks again fresh", async () => {
   const { calls } = renderApp("/settings?provider=claude", {
     "GET /v1/providers": listed({ ...claude, state: "signedOut", headline: "Not signed in", detail: "Run this on your computer, then check again.", signIn: "claude auth login" }),
   });
   const section = await screen.findByRole("region", { name: "Providers" });
-  const how = await within(section).findByRole("list", { name: "How to connect Claude Code" });
-  expect(how).toHaveTextContent("Sign in once in a terminal:claude auth login");
+  const how = await within(section).findByRole("group", { name: "Set up Claude Code" });
+  expect(how).toHaveTextContent("claude auth login");
   await userEvent.click(within(section).getByRole("button", { name: "Check again" }));
   expect(calls.some((c) => c.method === "GET" && c.path === "/v1/providers" && c.query.get("fresh") === "1")).toBe(true);
+});
+
+test("with the launcher, a provider's details have the same buttons as Get set up: Sign in, and its page's sign-in address", async () => {
+  const idle = { state: "idle" as const };
+  const { calls } = renderApp("/settings?provider=claude", {
+    "GET /v1/providers": listed({ ...claude, state: "signedOut", headline: "Not signed in", signIn: "claude auth login" }),
+    "GET /launcher/setup": { agents: [{ id: "claude", label: "Claude Code", canInstall: true, how: "npm", canSignIn: true, install: idle, signIn: idle }], ffmpeg: { found: true, fetch: idle } },
+    "POST /launcher/agents/:id/sign-in": [202, { state: "signingIn", since: "now" }],
+  });
+  const section = await screen.findByRole("region", { name: "Providers" });
+  await userEvent.click(await within(section).findByRole("button", { name: "Sign in to Claude Code" }));
+  expect(calls.some((c) => c.method === "POST" && c.path === "/launcher/agents/claude/sign-in")).toBe(true);
+  expect(section).not.toHaveTextContent("claude auth login");
 });
 
 test("a ready provider says how it answers when its adapter says, else that it is signed in", async () => {
@@ -163,7 +176,7 @@ test("a ready provider says how it answers when its adapter says, else that it i
   expect(section).not.toHaveTextContent("Signed in on your computer");
 });
 
-test("adds a provider in two steps, with how to connect one that isn't installed, and removes one", async () => {
+test("adds a provider in two steps, with the button that gets one that isn't installed, and removes one", async () => {
   const { calls } = renderApp(atProviders, {
     "GET /v1/providers": listed(claude, codex, pi),
     "PATCH /v1/providers/:id": (req: { params: Record<string, string>; body: unknown }) =>
@@ -176,10 +189,9 @@ test("adds a provider in two steps, with how to connect one that isn't installed
   expect(within(dialog).getAllByRole("radio").map((r) => r.textContent)).toEqual([expect.stringContaining("Pi")]);
   await userEvent.click(within(dialog).getByRole("button", { name: "Next" }));
   expect(dialog).toHaveTextContent("Install Pi on your computer, then check again.");
-  const how = within(dialog).getByRole("list", { name: "How to connect Pi" });
+  const how = within(dialog).getByRole("group", { name: "Set up Pi" });
   expect(how).toHaveTextContent("npm i -g pi-agent");
-  expect(how).toHaveTextContent("pi login");
-  expect(within(how).getByRole("link", { name: "Its install page" })).toHaveAttribute("href", "https://pi.example/install");
+  expect(within(how).getByRole("link", { name: "Get Pi" })).toHaveAttribute("href", "https://pi.example/install");
   expect(dialog).toHaveTextContent("You can add it now and sign in later.");
   await userEvent.click(within(dialog).getByRole("button", { name: "Add Pi" }));
   expect(calls.filter((c) => c.method === "PATCH").at(-1)).toMatchObject({ path: "/v1/providers/pi", body: { added: true, enabled: true } });

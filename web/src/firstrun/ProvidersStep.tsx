@@ -6,10 +6,13 @@ import { useLoad } from "../app/useLoad";
 import { OutlineButton, PrimaryButton } from "../design/Buttons";
 import { Icon } from "../design/Icon";
 import { ProviderMark } from "../design/ProviderMark";
+import { AgentButton, AgentNotes } from "../setup/AgentFix";
+import type { AgentSetup } from "../setup/api";
+import { useLauncherSetup } from "../setup/useLauncherSetup";
 import { byName, isConnected } from "./rules";
 
 /** The words under a name; the short ones (phone) are the part not marked long. */
-function Status({ p }: { p: Provider }): ReactNode {
+function Status({ p, a }: { p: Provider; a?: AgentSetup }): ReactNode {
   if (p.state === "ready") {
     return (
       <>
@@ -27,6 +30,14 @@ function Status({ p }: { p: Provider }): ReactNode {
     );
   }
   if (p.state === "missing") {
+    // Its maker's app is here but not the program Open Sourcebook runs.
+    if (a?.appFound) {
+      return (
+        <>
+          {a.appFound} app found<span className="fr-long">; Open Sourcebook needs its command-line part</span>
+        </>
+      );
+    }
     return (
       <>
         Not found<span className="fr-long"> on this computer</span>
@@ -36,69 +47,16 @@ function Status({ p }: { p: Provider }): ReactNode {
   return <>{p.headline}</>;
 }
 
-/** What to run to connect one the person has not installed, from the engine, with nothing assumed. */
-function HowTo({ p, onCheck, checking, checked }: { p: Provider; onCheck: () => void; checking: boolean; checked: boolean }) {
-  const steps: ReactNode[] = [];
-  if (p.state !== "signedOut") {
-    steps.push(
-      p.install?.command ? (
-        <>
-          Install it: <code>{p.install.command}</code>
-        </>
-      ) : p.install?.url ? (
-        <>
-          Install it from{" "}
-          <a href={p.install.url} target="_blank" rel="noreferrer">
-            its own page
-          </a>
-        </>
-      ) : (
-        <>Install it on this computer.</>
-      ),
-    );
-  }
-  if (p.signIn) {
-    steps.push(
-      <>
-        Sign in once in a terminal: <code>{p.signIn}</code>
-      </>,
-    );
-  }
-  steps.push(<>Come back here and press Check again.</>);
-  return (
-    <div className="fr-how" role="group" aria-label={`How to connect ${p.label}`}>
-      <b>
-        {p.state === "signedOut" ? `Sign in to ${p.label}` : `How to connect ${p.label}`}
-      </b>
-      <ol>
-        {steps.map((s, i) => (
-          <li key={i}>{s}</li>
-        ))}
-      </ol>
-      {checked && !checking && p.state === "missing" && (
-        // Checked again and still not found: an install in a place it is not looked for is seen only after a restart.
-        <p className="fr-restart" role="status">
-          Still not found. If you just installed it, close Open Sourcebook and open it again from its shortcut, then come back here.
-        </p>
-      )}
-      <OutlineButton onClick={onCheck} disabled={checking}>
-        {checking ? "Checking…" : "Check again"}
-      </OutlineButton>
-    </div>
-  );
-}
-
 /**
- * Step 1: the agents the engine lists, A to Z, each with Connect or how to
- * connect it. Nothing is picked for the person and none comes first.
+ * Step 1: the agents the engine lists, A to Z, each with Connect or the button that gets it there: Install, Get it
+ * from its own page, or Sign in (`../setup/AgentFix.tsx`, the same buttons Get set up shows). Nothing is picked for the
+ * person and none comes first.
  */
 export function ProvidersStep({ onNext, onConnected }: { onNext: () => void; onConnected: (count: number) => void }) {
   const client = useApi();
   const loaded = useLoad(() => client.providers(), [client]);
-  const [open, setOpen] = useState<string[]>([]);
   const [busy, setBusy] = useState<string>();
   const [checking, setChecking] = useState(false);
-  const [checked, setChecked] = useState(false);
   const [error, setError] = useState<unknown>();
   const data = loaded.data;
   const list = useMemo(() => byName(data?.providers ?? []), [data]);
@@ -124,14 +82,22 @@ export function ProvidersStep({ onNext, onConnected }: { onNext: () => void; onC
     setError(undefined);
     try {
       replace(await client.providers({ fresh: true }));
-      setChecked(true);
     } catch (e) {
       setError(e);
     } finally {
       setChecking(false);
     }
   }
-  const toggle = (id: string) => setOpen((o) => (o.includes(id) ? o.filter((x) => x !== id) : [...o, id]));
+  // An install or a sign-in a button started finishing is looked for at once; one signed in to is connected.
+  const launcher = useLauncherSetup(({ signedIn }) => {
+    void (async () => {
+      for (const id of signedIn) {
+        const p = data?.providers.find((x) => x.id === id);
+        if (p && !isConnected(p)) await client.updateProvider(id, { added: true, enabled: true }).catch(() => undefined);
+      }
+      await check();
+    })();
+  });
 
   const note =
     data && !data.connector.configured
@@ -175,9 +141,7 @@ export function ProvidersStep({ onNext, onConnected }: { onNext: () => void; onC
         <ul className="fr-list" aria-label="Coding agents">
           {list.map((p) => {
             const on = isConnected(p);
-            const expanded = open.includes(p.id);
-            // Installed but not signed in: the one thing left, signing in, shows at once, connected or not.
-            const howTo = p.state === "signedOut" ? !!p.signIn : !on && expanded;
+            const fix = { p, launcher, onCheck: () => void check(), checking };
             return (
               <li key={p.id}>
                 <div className="fr-row">
@@ -187,35 +151,38 @@ export function ProvidersStep({ onNext, onConnected }: { onNext: () => void; onC
                   <span className="fr-who">
                     <b>{p.label}</b>
                     <span>
-                      <Status p={p} />
+                      <Status p={p} {...(launcher.of(p.id) ? { a: launcher.of(p.id)! } : {})} />
                     </span>
                   </span>
-                  {on ? (
-                    <span className="fr-on">
-                      <span className="fr-ok">
-                        <Icon name="check" />
-                        Connected
-                      </span>
-                      <OutlineButton aria-label={`Disconnect ${p.label}`} disabled={busy === p.id} onClick={() => void change(p, false)}>
-                        Disconnect
-                      </OutlineButton>
-                    </span>
-                  ) : p.state === "ready" || p.state === "signedOut" ? (
-                    <PrimaryButton aria-label={`Connect ${p.label}`} disabled={busy === p.id} onClick={() => void change(p, true)}>
-                      Connect
-                    </PrimaryButton>
-                  ) : (
-                    <OutlineButton aria-label={`How to connect ${p.label}`} aria-expanded={expanded} onClick={() => toggle(p.id)}>
-                      How to connect
-                    </OutlineButton>
-                  )}
+                  <span className="fr-on">
+                    <AgentButton {...fix} />
+                    {on ? (
+                      <>
+                        <span className="fr-ok">
+                          <Icon name="check" />
+                          Connected
+                        </span>
+                        <OutlineButton aria-label={`Disconnect ${p.label}`} disabled={busy === p.id} onClick={() => void change(p, false)}>
+                          Disconnect
+                        </OutlineButton>
+                      </>
+                    ) : (
+                      (p.state === "ready" || p.state === "signedOut") && (
+                        <PrimaryButton aria-label={`Connect ${p.label}`} disabled={busy === p.id} onClick={() => void change(p, true)}>
+                          Connect
+                        </PrimaryButton>
+                      )
+                    )}
+                  </span>
                 </div>
-                {howTo && <HowTo p={p} onCheck={() => void check()} checking={checking} checked={checked} />}
+                <div className="fr-fix">
+                  <AgentNotes {...fix} />
+                </div>
               </li>
             );
           })}
         </ul>
-        <ErrorNotice error={error} />
+        <ErrorNotice error={error ?? launcher.error} />
       </section>
       <div className="fr-foot">
         <span className="fr-hint">Listed A to Z. Connect at least one to go on.</span>

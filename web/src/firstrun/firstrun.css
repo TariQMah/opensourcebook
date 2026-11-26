@@ -84,3 +84,9 @@
   .fr-foot .obtn { order: 1; }
   .fr-line { padding: 12px 0; }
 }
+/* What an agent's button is doing, under its row (../setup/AgentFix.tsx). */
+.fr-fix { padding: 0 16px 12px 60px; }
+.fr-fix:empty { display: none; }
+@media (max-width: 560px) {
+  .fr-fix { padding-left: 16px; }
+}

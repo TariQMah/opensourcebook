@@ -7,11 +7,13 @@ import { OutlineButton, PrimaryButton } from "../design/Buttons";
 import { Icon } from "../design/Icon";
 import { VoiceInstallProgress } from "../voice/InstallProgress";
 import { VoiceSetup } from "../voice/VoiceSetup";
-import { fetchFfmpeg, installAgent, launcherSetup, signInAgent, type AgentSetup, type LauncherSetup } from "./api";
+import { ProviderMark } from "../design/ProviderMark";
+import { byName } from "../firstrun/rules";
+import { AgentFixRow } from "./AgentFix";
+import { fetchFfmpeg } from "./api";
+import { SETUP_POLL_MS, useLauncherSetup } from "./useLauncherSetup";
 import "./setup.css";
 
-/** How often the list asks how an install or a sign-in is going. */
-export const SETUP_POLL_MS = 2000;
 
 /** Installed: the agent's program is on this computer, signed in or not. */
 const installed = (p: Provider) => p.state === "ready" || p.state === "signedOut" || p.state === "unavailable";
@@ -44,14 +46,23 @@ function Row({ ok, title, said, children }: { ok: boolean | undefined; title: st
  * a voice), each with what is wrong in plain words and the one button that fixes it, and Check again, which asks
  * everything again (the connector looks for each agent anew). The buttons are the launcher's (`./api.ts`); the agents,
  * how each installs and signs in, and the voices all come from their own lists, none named here. A sign-in is the
- * agent's own, in the browser: this only starts it and watches for the agent to say it is signed in.
+ * agent's own, in the browser: this only starts it and watches for the agent to say it is signed in. Each agent is a
+ * row of its own with its button (`./AgentFix.tsx`), the same rows the Connect step and Settings › Providers show.
  */
 export function GetSetUp({ onReady }: { onReady?: (ready: boolean) => void }) {
   const client = useApi();
   const providers = useLoad(() => client.providers({ fresh: true }), [client]);
-  const launcher = useLoad(() => launcherSetup(client), [client]);
+  // An agent the person signed in to with its button is the one they want: it is connected at once.
+  const launcher = useLauncherSetup(({ signedIn }) => {
+    void (async () => {
+      for (const id of signedIn) {
+        const p = providers.data?.providers.find((x) => x.id === id);
+        if (p && !(p.added && p.enabled)) await client.updateProvider(id, { added: true, enabled: true }).catch(() => undefined);
+      }
+      if (alive.current) await providers.reload();
+    })();
+  });
   const voice = useLoad(() => client.voice(), [client]);
-  const [error, setError] = useState<unknown>();
   const [checking, setChecking] = useState(false);
   const [voiceJob, setVoiceJob] = useState<{ state: "idle" | "working" | "failed"; message?: string; now?: VoiceInstallState }>({ state: "idle" });
   const [keyFor, setKeyFor] = useState<string>();
@@ -62,52 +73,12 @@ export function GetSetUp({ onReady }: { onReady?: (ready: boolean) => void }) {
   const here = list.filter(installed);
   const ready = list.filter((p) => p.state === "ready");
   const signedOut = list.filter((p) => p.state === "signedOut");
-  const agents = launcher.data?.agents ?? [];
-  const agentOf = (id: string) => agents.find((a) => a.id === id);
   const isReady = ready.length > 0;
 
   useEffect(() => onReady?.(isReady), [isReady, onReady]);
 
-  // While the launcher installs or signs in, it is asked again; what finished is then looked for anew.
-  const before = useRef<LauncherSetup | undefined>(undefined);
-  useEffect(() => {
-    const now = launcher.data;
-    const was = before.current;
-    before.current = now;
-    if (!now) return;
-    const finished = (pick: (a: AgentSetup) => string) => now.agents.filter((a) => pick(a) === "done" && was?.agents.some((b) => b.id === a.id && pick(b) !== "done"));
-    const installedNow = finished((a) => a.install.state);
-    const signedInNow = finished((a) => a.signIn.state);
-    if (installedNow.length || signedInNow.length) {
-      void (async () => {
-        // An agent the person signed in to with its button is the one they want: it is connected at once.
-        for (const a of signedInNow) {
-          const p = list.find((x) => x.id === a.id);
-          if (p && !(p.added && p.enabled)) await client.updateProvider(a.id, { added: true, enabled: true }).catch(() => undefined);
-        }
-        if (alive.current) await providers.reload();
-      })();
-    }
-    const going = now.agents.some((a) => a.install.state === "installing" || a.signIn.state === "signingIn") || now.ffmpeg.fetch.state === "installing";
-    if (!going) return;
-    const timer = setTimeout(() => void launcher.reload(), SETUP_POLL_MS);
-    return () => clearTimeout(timer);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [launcher.data]);
-
-  async function act(call: () => Promise<unknown>) {
-    setError(undefined);
-    try {
-      await call();
-      await launcher.reload();
-    } catch (e) {
-      setError(e);
-    }
-  }
-
   async function checkAgain() {
     setChecking(true);
-    setError(undefined);
     await Promise.all([providers.reload(), launcher.reload(), voice.reload()]);
     if (alive.current) setChecking(false);
   }
@@ -139,9 +110,8 @@ export function GetSetUp({ onReady }: { onReady?: (ready: boolean) => void }) {
     }
   }
 
-  const launcherOff = launcher.error !== undefined && !launcher.data;
-  const installButtons = agents.filter((a) => a.canInstall);
-
+  const launcherOff = launcher.off;
+  const check = () => void checkAgain();
   return (
     <div className="gs">
       <ul className="gs-list" aria-label="What this computer needs">
@@ -158,47 +128,12 @@ export function GetSetUp({ onReady }: { onReady?: (ready: boolean) => void }) {
                 : "None is installed yet. It is what makes your videos and answers your chats, on your own plan."
           }
         >
-          {providers.data && !here.length && (
-            <>
-              {installButtons.map((a) =>
-                a.install.state === "installing" ? (
-                  <span key={a.id} className="gs-note" role="status">
-                    Installing {a.label}… this can take a few minutes.
-                  </span>
-                ) : (
-                  <PrimaryButton key={a.id} onClick={() => void act(() => installAgent(client, a.id))} disabled={installButtons.some((b) => b.install.state === "installing")}>
-                    Install {a.label}
-                  </PrimaryButton>
-                ),
-              )}
-              {installButtons.map((a) =>
-                a.install.state === "failed" ? (
-                  <span key={`${a.id}-failed`} className="gs-err" role="alert">
-                    {a.install.message}
-                  </span>
-                ) : a.install.state === "done" && !here.some((p) => p.id === a.id) ? (
-                  <span key={`${a.id}-done`} className="gs-note">
-                    {a.label} is installed. Press Check again if it is not found yet.
-                  </span>
-                ) : null,
-              )}
-              {launcherOff && (
-                <span className="gs-note">
-                  Install one from its own page:{" "}
-                  {list
-                    .filter((p) => p.install?.url)
-                    .map((p, i) => (
-                      <span key={p.id}>
-                        {i > 0 && ", "}
-                        <a href={p.install!.url} target="_blank" rel="noreferrer">
-                          {p.label}
-                        </a>
-                      </span>
-                    ))}
-                  .
-                </span>
-              )}
-            </>
+          {providers.data && list.length > 0 && (
+            <ul className="ag-list gs-agents" aria-label="Coding agents">
+              {byName(list).map((p) => (
+                <AgentFixRow key={p.id} p={p} launcher={launcher} onCheck={check} checking={checking} checkHere={false} mark={<ProviderMark mark={p.mark} label={p.label} size={18} />} />
+              ))}
+            </ul>
           )}
         </Row>
 
@@ -211,48 +146,10 @@ export function GetSetUp({ onReady }: { onReady?: (ready: boolean) => void }) {
               : isReady
                 ? `${listed(ready.map((p) => p.label))} ${ready.length === 1 ? "is" : "are"} signed in.`
                 : signedOut.length
-                  ? `${listed(signedOut.map((p) => p.label))} ${signedOut.length === 1 ? "is" : "are"} installed but not signed in.`
-                  : "Install an agent first, then sign in to it here."
+                  ? `${listed(signedOut.map((p) => p.label))} ${signedOut.length === 1 ? "is" : "are"} installed but not signed in. Sign in with its button above.`
+                  : "Install an agent first, then sign in to it above."
           }
-        >
-          {providers.data &&
-            !isReady &&
-            signedOut.map((p) => {
-              const a = agentOf(p.id);
-              if (!a?.canSignIn)
-                return p.signIn ? (
-                  <span key={p.id} className="gs-note">
-                    Sign in to {p.label} once in a terminal: <code>{p.signIn}</code>
-                  </span>
-                ) : null;
-              if (a.signIn.state === "signingIn")
-                return (
-                  <span key={p.id} className="gs-note" role="status">
-                    Finish signing in to {p.label} in your browser.
-                    {a.signIn.url && (
-                      <>
-                        {" "}
-                        If it did not open,{" "}
-                        <a href={a.signIn.url} target="_blank" rel="noreferrer">
-                          open the sign-in page
-                        </a>
-                        .
-                      </>
-                    )}
-                  </span>
-                );
-              return (
-                <span key={p.id} className="gs-fixone">
-                  <PrimaryButton onClick={() => void act(() => signInAgent(client, p.id))}>{a.signIn.state === "failed" ? `Sign in to ${p.label} again` : `Sign in to ${p.label}`}</PrimaryButton>
-                  {a.signIn.state === "failed" && (
-                    <span className="gs-err" role="alert">
-                      {a.signIn.message}
-                    </span>
-                  )}
-                </span>
-              );
-            })}
-        </Row>
+        />
 
         <Row
           ok={launcher.data ? launcher.data.ffmpeg.found : undefined}
@@ -274,7 +171,7 @@ export function GetSetUp({ onReady }: { onReady?: (ready: boolean) => void }) {
                   Getting ffmpeg…
                 </span>
               ) : (
-                <PrimaryButton onClick={() => void act(() => fetchFfmpeg(client))}>Get ffmpeg</PrimaryButton>
+                <PrimaryButton onClick={() => void launcher.act(() => fetchFfmpeg(client))}>Get ffmpeg</PrimaryButton>
               )}
               {launcher.data.ffmpeg.fetch.state === "failed" && (
                 <span className="gs-err" role="alert">
@@ -317,9 +214,9 @@ export function GetSetUp({ onReady }: { onReady?: (ready: boolean) => void }) {
           <VoiceSetup compact start={keyFor} onDone={() => void voice.reload()} />
         </div>
       )}
-      {error !== undefined && (
+      {launcher.error !== undefined && (
         <p className="gs-err gs-pad" role="alert">
-          {errorText(error)}
+          {errorText(launcher.error)}
         </p>
       )}
       <div className="gs-foot">

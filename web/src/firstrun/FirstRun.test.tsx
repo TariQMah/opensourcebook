@@ -89,7 +89,7 @@ describe("the redirect rules", () => {
 });
 
 describe("step 1: providers", () => {
-  it("lists the agents A to Z with Connect or How to connect, none picked and Next waiting", async () => {
+  it("lists the agents A to Z, each with Connect or the button that gets it there, none picked and Next waiting", async () => {
     expect(byName(found.providers).map((p) => p.label)).toEqual(["Antigravity", "Claude Code", "Cursor"]);
     renderApp("/welcome/providers", engineWith(fresh));
     await screen.findByRole("button", { name: "Connect Claude Code" });
@@ -97,7 +97,8 @@ describe("step 1: providers", () => {
     expect(rows.map((r) => r.querySelector("b")?.textContent)).toEqual(["Antigravity", "Claude Code", "Cursor"]);
     expect(screen.getByRole("button", { name: "Connect Claude Code" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Connect Cursor" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "How to connect Antigravity" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Get Antigravity" })).toHaveAttribute("href", "https://agy.example");
+    expect(screen.queryByRole("button", { name: /How to connect/ })).not.toBeInTheDocument();
     expect(screen.getByText("Listed A to Z. Connect at least one to go on.")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Next" })).toBeDisabled();
     expect(screen.queryByText(/default|recommended/i)).not.toBeInTheDocument();
@@ -112,46 +113,53 @@ describe("step 1: providers", () => {
     expect(await screen.findByRole("heading", { name: "Give your videos and audio a voice" })).toBeInTheDocument();
   });
 
-  it("shows the engine's install and sign-in commands for one that is not found, and Check again asks fresh", async () => {
+  it("one that is not found has Get and Check again, which asks fresh; without the launcher its install command is shown too", async () => {
     const { calls } = renderApp("/welcome/providers", engineWith(fresh));
-    await userEvent.click(await screen.findByRole("button", { name: "How to connect Antigravity" }));
-    const how = screen.getByRole("group", { name: "How to connect Antigravity" });
-    expect(within(how).getByText("npm i -g agy")).toBeInTheDocument();
-    expect(within(how).getByText("agy login")).toBeInTheDocument();
-    await userEvent.click(within(how).getByRole("button", { name: "Check again" }));
+    const missing = (await screen.findByText("Antigravity", { selector: "b" })).closest("li")!;
+    expect(within(missing).getByText("npm i -g agy")).toBeInTheDocument();
+    await userEvent.click(within(missing).getByRole("button", { name: "Check again" }));
     await waitFor(() => expect(calls.some((c) => c.path === "/v1/providers" && c.query.get("fresh") === "1")).toBe(true));
-    // Still not found after the check: it says plainly that a restart is what is left.
-    expect(await within(how).findByRole("status")).toHaveTextContent("If you just installed it, close Open Sourcebook and open it again");
   });
 
-  it("shows each of the three states apart: ready to connect, installed but not signed in with its sign-in, not installed with its install", async () => {
+  it("shows each of the three states apart: ready to connect, installed but not signed in with its sign-in, not installed with its button", async () => {
     renderApp("/welcome/providers", engineWith(fresh));
     const row = async (label: string) => (await screen.findByText(label, { selector: "b" })).closest("li")!;
 
     const ready = await row("Claude Code");
     expect(ready).toHaveTextContent("Found on this computer, signed in");
     expect(within(ready).getByRole("button", { name: "Connect Claude Code" })).toBeInTheDocument();
-    expect(within(ready).queryByRole("group")).not.toBeInTheDocument();
+    expect(within(ready).getAllByRole("button")).toHaveLength(1);
 
     const signedOut = await row("Cursor");
     expect(signedOut).toHaveTextContent("Found on this computer · not signed in yet");
-    const signIn = within(signedOut).getByRole("group", { name: "How to connect Cursor" });
-    expect(signIn).toHaveTextContent("Sign in to Cursor");
-    expect(within(signIn).getByText("cur login")).toBeInTheDocument();
-    expect(signIn).not.toHaveTextContent("Install it");
+    expect(within(signedOut).getByText("cur login")).toBeInTheDocument();
+    expect(within(signedOut).queryByRole("link", { name: /^Get/ })).not.toBeInTheDocument();
 
     const missing = await row("Antigravity");
     expect(missing).toHaveTextContent("Not found on this computer");
     expect(within(missing).queryByRole("button", { name: "Connect Antigravity" })).not.toBeInTheDocument();
-    await userEvent.click(within(missing).getByRole("button", { name: "How to connect Antigravity" }));
-    expect(within(missing).getByText("npm i -g agy")).toBeInTheDocument();
+    expect(within(missing).getByRole("link", { name: "Get Antigravity" })).toBeInTheDocument();
   });
 
-  it("links the install page when the agent has no command", async () => {
-    const routes = engineWith(fresh, { ...found, providers: [{ ...found.providers[0]!, install: { url: "https://agy.example/install" }, signIn: undefined }] });
-    renderApp("/welcome/providers", routes);
-    await userEvent.click(await screen.findByRole("button", { name: "How to connect Antigravity" }));
-    expect(screen.getByRole("link", { name: "its own page" })).toHaveAttribute("href", "https://agy.example/install");
+  it("with the launcher: Install, Sign in, and its maker's app found but not its program, the same buttons as Get set up", async () => {
+    const idle = { state: "idle" as const };
+    const launcher = {
+      agents: [
+        { id: "agy", label: "Antigravity", canInstall: true, how: "script", appFound: "Antigravity", canSignIn: false, install: idle, signIn: idle },
+        { id: "cur", label: "Cursor", canInstall: true, how: "script", canSignIn: true, install: idle, signIn: idle },
+        { id: "cla", label: "Claude Code", canInstall: true, how: "npm", canSignIn: true, install: idle, signIn: idle },
+      ],
+      ffmpeg: { found: true, fetch: idle },
+    };
+    const { calls } = renderApp("/welcome/providers", engineWith(fresh, found, { "GET /launcher/setup": launcher, "POST /launcher/agents/:id/install": [202, { state: "installing", since: "now" }] }));
+    const missing = (await screen.findByText("Antigravity", { selector: "b" })).closest("li")!;
+    expect(await within(missing).findByText(/Antigravity app found/)).toBeInTheDocument();
+    expect(missing).toHaveTextContent("Open Sourcebook needs its command-line part");
+    await userEvent.click(within(missing).getByRole("button", { name: "Install Antigravity" }));
+    expect(calls.some((c) => c.method === "POST" && c.path === "/launcher/agents/agy/install")).toBe(true);
+    const signedOut = screen.getByText("Cursor", { selector: "b" }).closest("li")!;
+    expect(within(signedOut).getByRole("button", { name: "Sign in to Cursor" })).toBeInTheDocument();
+    expect(within(signedOut).getByRole("button", { name: "Connect Cursor" })).toBeInTheDocument();
   });
 
   it("disconnects a connected one", async () => {

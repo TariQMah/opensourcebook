@@ -147,8 +147,8 @@ button.sx-back { font: inherit; font-weight: 600; font-size: 14px; padding: 0; b
 .pv-state small { color: var(--muted); font-size: 12.5px; }
 .pv-setup { margin-top: 10px; padding: 12px; border-radius: 12px; background: var(--accentSoft); display: flex; flex-direction: column; align-items: flex-start; gap: 8px; font-size: 13px; line-height: 19px; color: var(--text); }
 .pv-setup p { margin: 0; }
-.pv-cmd { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.pv-cmd code { font-family: var(--font-mono); font-size: 12.5px; background: var(--surface); border-radius: 8px; padding: 5px 9px; box-shadow: 0 0 0 1px var(--accentBorder); }
+.pv-fix { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.pv-fix .pbtn { padding: 6px 14px; font-size: 12px; line-height: 16px; text-decoration: none; }
 .pv-tools { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
 .pv-filter { flex: 1; display: flex; align-items: center; gap: 8px; padding: 6px 10px; border-radius: 10px; box-shadow: 0 0 0 1px var(--border); color: var(--muted); }
 .pv-filter:focus-within { box-shadow: 0 0 0 1.5px var(--primary); }
@@ -195,10 +195,6 @@ button.sx-back { font: inherit; font-weight: 600; font-size: 14px; padding: 0; b
 .pv-dialog .acts { display: flex; justify-content: flex-end; gap: var(--space-8); margin-top: 20px; }
 .pv-two { display: grid; grid-template-columns: 1fr 1fr; column-gap: 24px; border-top: 1px solid var(--border); }
 .pv-two > .pv-sec { border-top: 0; }
-.pv-how { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 8px; }
-.pv-how li { padding-left: 2px; }
-.pv-how li > .pv-cmd { margin-top: 4px; }
-.pv-how a { color: var(--primaryText); font-weight: 600; margin-left: 4px; }
 .pv-chip { margin-left: auto; display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; font-weight: 600; }
 .pv-chip.on { color: var(--successText); }
 .pv-chip.warn { color: var(--accentText); }
