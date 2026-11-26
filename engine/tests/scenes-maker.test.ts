@@ -99,6 +99,29 @@ describe("scenes maker: making a video", () => {
     expect(plain.service.videos.get("job-1")!.body).not.toHaveProperty("skills");
   });
 
+  it("sends each source's address and the pictures kept from it, by their path on the engine, for the job folder", async () => {
+    const t = setup({ settings: { style: "blueprint", minutes: 1 } });
+    t.ctx.sources = [{ ...source, envelope: { ...source.envelope, kind: "pdf", originalURL: "https://example.org/sky.pdf", assets: [
+      { id: "a1", kind: "figure", url: "/v1/assets/a1", caption: "Figure 1", page: 2, contentType: "image/png" },
+      { id: "a2", kind: "audio", url: "/v1/assets/a2" },
+    ] } }];
+    await runEngine(t.definition, t.ctx);
+    expect(t.service.videos.get("job-1")!.body.sources).toEqual([
+      { id: "src-1", title: "Sky notes", kind: "pdf", url: "https://example.org/sky.pdf", pictures: [{ url: "/v1/assets/a1", kind: "figure", caption: "Figure 1", page: 2, contentType: "image/png" }] },
+    ]);
+  });
+
+  it("opens a video's job folder on this computer through the service, by the video the job follows, and says so when it is gone", async () => {
+    const t = setup({ settings: { style: "blueprint", minutes: 1 } });
+    await runEngine(t.definition, t.ctx);
+    const files = t.definition.jobFiles!;
+    expect(files.can({ maker: "scenes" })).toBe(true);
+    expect(await files.show({ jobId: "job-1", settings: {}, kept: {} })).toBeUndefined();
+    expect(await files.show({ jobId: "other", settings: {}, kept: { "scenes:video": "job-1" } })).toBeUndefined();
+    expect(t.service.shown).toEqual(["job-1", "job-1"]);
+    expect(await files.show({ jobId: "nobody", settings: {}, kept: {} })).toMatch(/no longer on this computer/);
+  });
+
   it("names an agent in every request to the service: the item's own, else the one the job settles", async () => {
     const picked = setup({ settings: { style: "blueprint", minutes: 1, agent: "agent:codex:gpt-6", effort: "high" } });
     await runEngine(picked.definition, picked.ctx);
@@ -124,6 +147,8 @@ describe("scenes maker: making a video", () => {
       { id: "chunk-1", label: "P1", sourceId: "src-1", sourceTitle: "Sky notes", locator: "page 1", text: V1 },
       { id: "chunk-2", label: "P2", sourceId: "src-1", sourceTitle: "Sky notes", locator: "page 2", text: V2 },
     ]);
+    // The sources go too, for the video's job folder on the service: where each came from, its kept pictures.
+    expect(sent.sources).toEqual([{ id: "src-1", title: "Sky notes", kind: "text" }]);
     expect(sent.limits).toMatchObject({ maxScenes: 60, narrationMaxChars: 1200, visualMinChars: 20, visualMaxChars: 700, onScreenTextMax: 4, onScreenChars: 120, cites: 4, quoteChars: 300 });
 
     const video = result.output.payload;

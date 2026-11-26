@@ -46,6 +46,7 @@ import {
   type ScenesFailureCode,
   type ScenesJob,
   type ScenesPassage,
+  type ScenesSource,
   type ScenesResult,
   type ScenesStatus,
 } from "./client";
@@ -96,6 +97,9 @@ const VIDEO_KEY = "scenes:video";
 /** Said when what a video was made from is gone from the scenes service, so one scene of it cannot be made again. */
 const DRAFT_GONE = "What this video was made from is no longer on this computer, so one scene of it can't be made again. Make the whole video again instead.";
 
+/** Said when a video's job folder is gone from this computer (cleaned up some days after it was made). */
+const FILES_GONE = "This video's files are no longer on this computer: they are cleaned up some days after a video is made.";
+
 /** The scenes service's id of the video a job made: what it kept, else the job's own id, the first one it uses. */
 function madeVideoId(from: { madeBy?: string; kept?: Record<string, JsonValue> }): string | undefined {
   const kept = from.kept?.[VIDEO_KEY];
@@ -143,6 +147,16 @@ export function createScenesMaker(options: ScenesMakerOptions): VideoMaker<Scene
       return statusFor(status, label());
     },
     preview: (styleId, signal) => options.client.preview(styleId, signal),
+    showsFiles: async ({ jobId, kept, signal }) => {
+      const id = madeVideoId({ madeBy: jobId, kept });
+      if (!id) return FILES_GONE;
+      try {
+        return (await options.client.showFiles(id, signal)) ? undefined : FILES_GONE;
+      } catch (error) {
+        if (error instanceof ScenesUnreachableError) return `${label()} needs Open Sourcebook's scene maker running on this computer to show its files. Start it, then try again.`;
+        throw error;
+      }
+    },
     remakesScene: {
       check: async ({ scene, madeBy, kept, signal }) => {
         const id = madeVideoId({ ...(madeBy ? { madeBy } : {}), kept });
@@ -410,6 +424,7 @@ class ScenesEngine implements OutputEngine<VideoSettings, ScenesBlueprint, Video
           ...(picked.effort ? { effort: picked.effort } : {}),
           ...reviewOf(ctx.node.settings, picked.agent),
           passages: passages.map(toWirePassage),
+          sources: readSources(ctx.sources).map(toWireSource),
           ...(packs.length > 0 ? { skills: packs } : {}),
           limits: {
             maxScenes: VIDEO_LIMITS.maxScenes,
@@ -692,6 +707,28 @@ function elapsedMs(job: ScenesJob): number {
 function toWirePassage(passage: Passage): ScenesPassage {
   const where = locatorWords(passage.locator);
   return { id: passage.id, label: passage.label, sourceId: passage.sourceId, sourceTitle: passage.sourceTitle ?? "Source", ...(where ? { locator: where } : {}), text: passage.text };
+}
+
+/** The kinds of a source's kept media that are pictures, for the video's job folder. */
+const PICTURE_KINDS: ReadonlySet<string> = new Set(["image", "figure", "frame", "slide", "thumbnail"]);
+
+/** A source as the scenes service's job folder takes it: where it came from and the pictures already kept from it. */
+function toWireSource(source: NodeSource): ScenesSource {
+  const envelope = source.envelope;
+  const url = envelope.originalURL ?? envelope.canonicalURL;
+  const pictures = (envelope.assets ?? [])
+    .filter((asset) => PICTURE_KINDS.has(asset.kind))
+    .map((asset) => ({
+      url: asset.url,
+      kind: asset.kind,
+      ...(asset.caption ? { caption: asset.caption } : {}),
+      ...(asset.page !== undefined ? { page: asset.page } : {}),
+      ...(asset.timestampMs !== undefined ? { timestampMs: asset.timestampMs } : {}),
+      ...(asset.width ? { width: asset.width } : {}),
+      ...(asset.height ? { height: asset.height } : {}),
+      ...(asset.contentType ? { contentType: asset.contentType } : {}),
+    }));
+  return { id: source.sourceId, title: source.title ?? envelope.title ?? "Source", kind: envelope.kind, ...(url && /^https?:\/\//.test(url) ? { url } : {}), ...(pictures.length > 0 ? { pictures } : {}) };
 }
 
 /** Where a passage sits, in a few words for the agent. */

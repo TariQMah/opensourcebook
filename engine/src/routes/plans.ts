@@ -34,6 +34,7 @@
  *
  * A plan another client owns, or an item that is not in the plan, is 404.
  */
+import { hasJobFiles } from "./job-files";
 import { failureWords, waitingWords } from "../jobs/failure-words";
 import { waitOf } from "../jobs/waits";
 import { sameLine } from "../jobs/lanes";
@@ -292,7 +293,8 @@ export async function progressView(deps: EngineDeps, plan: Plan): Promise<Record
       status,
       // A failed item says why on its own row, so a plan read needs nothing else.
       ...(status === "failed" ? { errorMessage: job ? failureWords(job, thing) : FAILED_ITEM } : {}),
-      ...(job ? { job: jobView(job, thing, job.status === "queued" ? await beingMade(job) : []) } : {}),
+      // `files`: the job works in a folder on this computer the person can open (routes/job-files.ts).
+      ...(job ? { job: { ...jobView(job, thing, job.status === "queued" ? await beingMade(job) : []), ...(hasJobFiles(job, deps) ? { files: true } : {}) } } : {}),
       ...(outputId ? { outputId } : {}),
       done: recorded?.doneAt !== undefined,
       ...(recorded?.doneAt ? { doneAt: recorded.doneAt } : {}),

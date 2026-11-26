@@ -1099,6 +1099,19 @@ phone. A range it cannot satisfy is `416` with `content-range: bytes */<size>`.
 Only the asked bytes are read from storage, streamed as they are sent; an
 open range (`bytes=N-`) is the rest of the file.
 
+
+## A job's files on this computer
+
+`POST /v1/jobs/:id/files/show` opens the folder a job works in, in this
+computer's file manager (Finder, Explorer, or the desktop's own), for a
+format whose jobs have one (`FormatDefinition.jobFiles`; today a video made
+by the scenes service, whose job folder is laid out in
+`docs/JOB-FOLDER.md`). An item's job in `GET /v1/plans/:id/progress` says
+`files: true` when it has such a folder. `200 { shown: true }`; `409
+no_files` with `message` in plain words when it has none, or its folder was
+cleaned up, or the scenes service is not running. The web app offers it
+only in the browser on this computer; a paired phone is refused by its
+proxy.
 ## Usage
 
 | Route | Response | Errors |

@@ -36,6 +36,7 @@
  *   GET /v1/make-times   (how long things took to make here, from past runs only)
  *   GET /v1/activity     (what is being made now, the agents' finished turns and what they took)
  *   POST /v1/jobs              GET /v1/jobs/:id   POST /v1/jobs/:id/retry   POST /v1/jobs/:id/cancel
+ *   POST /v1/jobs/:id/files/show   (opens the folder a job works in, on this computer)
  *                              (the August API, kept as a wrapper for the iOS app)
  *
  * Every /v1 route but assets needs the client token. The queue handler runs
@@ -47,6 +48,7 @@ import { batchConcurrency } from "./jobs/lanes";
 import type { JobQueueBatch } from "./jobs/types";
 import { errorResponse, json, notFound } from "./http";
 import { cancelLegacyJob, createJob, getJob, retryLegacyJob } from "./routes/jobs";
+import { showJobFiles } from "./routes/job-files";
 import { listEdgeKinds, listFormats } from "./routes/formats";
 import {
   addEdge,
@@ -287,6 +289,8 @@ async function route(request: Request, deps: EngineDeps | undefined, ctx: Worker
   if (method === "POST" && remade) return remakeScene(request, decodeURIComponent(remade[1]!), decodeURIComponent(remade[2]!), deps, ctx);
 
   if (method === "POST" && path === "/v1/jobs") return createJob(request, deps, ctx);
+  const files = /^\/v1\/jobs\/([^/]+)\/files\/show$/.exec(path);
+  if (method === "POST" && files) return showJobFiles(request, decodeURIComponent(files[1]!), deps);
   const job = /^\/v1\/jobs\/([^/]+)(?:\/(retry|cancel))?$/.exec(path);
   if (job) {
     const id = decodeURIComponent(job[1]);

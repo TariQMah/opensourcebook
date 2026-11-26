@@ -154,6 +154,20 @@ export interface ScenesPassage {
   text: string;
 }
 
+/**
+ * One source of a video, for its job folder on the service (docs/JOB-FOLDER.md): its id (the passages' `sourceId`),
+ * title, kind, where it came from, and the pictures the engine kept from it, by their `/v1/assets/<id>` path here.
+ */
+export interface ScenesSource {
+  id: string;
+  title: string;
+  kind: string;
+  url?: string;
+  /** The original file on this computer, when the source is one; none while uploads are kept only in the engine. */
+  path?: string;
+  pictures?: Array<{ url: string; kind: string; caption?: string; page?: number; timestampMs?: number; width?: number; height?: number; contentType?: string }>;
+}
+
 export interface ScenesLimits {
   maxScenes: number;
   minScenes: number;
@@ -179,6 +193,8 @@ export interface NewScenesVideo {
   model?: string;
   effort?: string;
   passages: ScenesPassage[];
+  /** The sources the passages are from, for the video's job folder; an older service ignores them. */
+  sources?: ScenesSource[];
   limits?: ScenesLimits;
   /** Skills for the video agent beyond the service's own: the project's packs, each by folder name with its files. */
   skills?: Array<{ name: string; files: Record<string, string> }>;
@@ -288,6 +304,14 @@ export class ScenesClient {
   }
 
   /** Stops the agent and any render. Best effort: a service that is gone has nothing to stop. */
+  /** Opens a video's job folder in this computer's file manager (`POST /videos/:id/show-files`); false when the service no longer has it. */
+  async showFiles(id: string, signal?: AbortSignal): Promise<boolean> {
+    const response = await this.call("POST", `/videos/${encodeURIComponent(id)}/show-files`, {}, CALL_TIMEOUT_MS, signal);
+    if (response.ok) return true;
+    if (response.status === 404 || response.status === 405) return false;
+    throw await refused(response, "open the video's folder");
+  }
+
   async stop(id: string): Promise<void> {
     await this.call("POST", `/videos/${encodeURIComponent(id)}/stop`, {}, STATUS_TIMEOUT_MS).catch(() => undefined);
   }

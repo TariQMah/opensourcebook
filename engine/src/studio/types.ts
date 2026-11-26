@@ -582,6 +582,19 @@ export interface FormatDefinition<Settings = unknown, Blueprint = unknown, Paylo
    * Absent: the format remakes no part of what it made, and the route refuses it.
    */
   remakeScene?: SceneRemake<Payload>;
+  /**
+   * The folder on this computer a job of this format works in, opened in the file manager for the person
+   * (`POST /v1/jobs/:id/files/show`). Absent: its jobs have no such folder, and the app offers none.
+   */
+  jobFiles?: JobFiles;
+}
+
+/** How a format opens the folder one of its jobs works in (`FormatDefinition.jobFiles`). */
+export interface JobFiles {
+  /** Whether a job with these settings (the job's own, unparsed) works in a folder on this computer that can be opened. */
+  can(settings: unknown): boolean;
+  /** Opens it: undefined once it is open, else why not in a sentence with what to do. */
+  show(input: { jobId: string; settings: unknown; kept: Record<string, JsonValue>; signal?: AbortSignal }): Promise<string | undefined>;
 }
 
 /** How a format makes one scene of a made output again (`FormatDefinition.remakeScene`). */

@@ -69,6 +69,8 @@ const DEFAULT_FILE = new TextEncoder().encode("fake mp4 bytes");
 export class FakeScenesService {
   readonly videos = new Map<string, Video>();
   readonly calls: string[] = [];
+  /** The videos whose job folder was opened (POST /videos/:id/show-files). */
+  readonly shown: string[] = [];
   readonly options: FakeScenesOptions;
 
   constructor(options: FakeScenesOptions = {}) {
@@ -134,10 +136,14 @@ export class FakeScenesService {
       }
       return json({ id }, 202);
     }
-    const video = /^\/videos\/([^/]+)(?:\/(file|stop|revise|resume|remake-scene))?$/.exec(path);
+    const video = /^\/videos\/([^/]+)(?:\/(file|stop|revise|resume|remake-scene|show-files))?$/.exec(path);
     if (!video) return json({ ok: false }, 404);
     const job = this.videos.get(decodeURIComponent(video[1]!));
     if (!job) return json({ ok: false, error: "no such video" }, 404);
+    if (method === "POST" && video[2] === "show-files") {
+      this.shown.push(job.id);
+      return json({ folder: `/jobs/${job.id}` });
+    }
     if (method === "POST" && video[2] === "stop") {
       job.stopped = true;
       job.state = "stopped";

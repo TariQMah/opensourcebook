@@ -314,12 +314,27 @@ export function videoDefinitionFor(makers: VideoMakerRegistry): VideoDefinition 
         return maker.remakesScene.check({ scene, ...(madeBy ? { madeBy } : {}), kept, ...(signal ? { signal } : {}) });
       },
     },
+    jobFiles: {
+      can: (settings) => !!filesMakerOf(makers, settings),
+      show: async ({ jobId, settings, kept, signal }) => {
+        const maker = filesMakerOf(makers, settings);
+        if (!maker?.showsFiles) return "This video has no files on this computer to show.";
+        return maker.showsFiles({ jobId, kept, ...(signal ? { signal } : {}) });
+      },
+    },
     estimateCost: (input) => {
       const resolved = makers.resolve(input.settings);
       if ("missing" in resolved) return { unpriced: true, basis: `video maker "${resolved.missing}" is not set up here` };
       return resolved.maker.estimateCost(input);
     },
   };
+}
+
+/** The maker a job with these settings is made by, when it makes it in a folder on this computer that can be opened. */
+function filesMakerOf(makers: VideoMakerRegistry, raw: unknown): VideoMaker | undefined {
+  const parsed = parseVideoSettings(raw);
+  const resolved = parsed.ok ? makers.resolve(parsed.settings) : undefined;
+  return resolved && "maker" in resolved && resolved.maker.showsFiles ? resolved.maker : undefined;
 }
 
 /** The maker that made a video, when it can make one of its scenes again. */

@@ -92,6 +92,11 @@ export interface VideoMaker<Blueprint = unknown> {
   remakesScene?: {
     check(input: { scene: string; madeBy?: string; kept: Record<string, JsonValue>; signal?: AbortSignal }): Promise<string | undefined>;
   };
+  /**
+   * When it makes a video in a folder on this computer: opens a job's folder in the file manager, from the job's id and
+   * what it kept on the job; undefined once open, else why not. Absent: its videos have no folder to open.
+   */
+  showsFiles?(input: { jobId: string; kept: Record<string, JsonValue>; signal?: AbortSignal }): Promise<string | undefined>;
 }
 
 /** The value of `maker` and `style` that leaves the pick to Open Sourcebook. */
