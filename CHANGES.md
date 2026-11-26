@@ -4,6 +4,8 @@ The newest first. `opensourcebook update` prints the lines here that your copy d
 
 ## 2026-11-26
 
+- Settings > Backups saves every project in one file, with its sources, chats, plans and everything made, videos included, and restores it here or on another computer. A project you have already is never changed unless you choose: keep both, or replace yours. Files of a linked folder stay where they are; the backup keeps where they were.
+- Home can keep your projects in folders: make one with New folder, put a project in it from its menu with Move to folder, and search inside it. Deleting a folder puts its projects back on Home and deletes none.
 - Open Sourcebook no longer slows your computer down while it reads a web page, and videos play without pausing every few seconds. The engine had kept trying to download a whole browser (about 150 MB) in the background, and every video seek read the whole video file again; now pages are read without that browser and a video sends only the part being played. Run `opensourcebook update` to get it.
 
 ## 2026-11-24
