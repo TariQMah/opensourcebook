@@ -6,7 +6,7 @@
  */
 import { appendFileSync, mkdirSync, statSync, truncateSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { app, BrowserWindow, ipcMain, Notification, shell } from "electron";
+import { app, BrowserWindow, dialog, ipcMain, Notification, shell } from "electron";
 import { failure, runLauncher } from "./launcher.ts";
 import { appDataRoot, carried as carriedIn, layout, APP_NAME } from "./paths.ts";
 import { prepare } from "./prepare.ts";
@@ -151,6 +151,12 @@ else {
   ipcMain.handle("status", () => status);
   ipcMain.handle("retry", () => void begin());
   ipcMain.handle("show-log", () => shell.openPath(at.log));
+  // A folder picked in the system's dialog, for the web app's own page only; undefined when the person cancels.
+  ipcMain.handle("pick-folder", async (event) => {
+    if (!window || !webOrigin || !event.senderFrame?.url.startsWith(webOrigin)) return undefined;
+    const picked = await dialog.showOpenDialog(window, { properties: ["openDirectory", "createDirectory"] });
+    return picked.canceled ? undefined : picked.filePaths[0];
+  });
   app.whenReady().then(createWindow);
   app.on("activate", () => {
     if (!window) createWindow();
