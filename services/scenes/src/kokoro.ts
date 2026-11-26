@@ -20,7 +20,7 @@ import { setting, type VoiceService } from "./voices.ts";
 
 /** Where the person's own install of Kokoro lives (`opensourcebook voice install kokoro`). */
 export const KOKORO_HOME = join(import.meta.dirname, "..", "voices", "kokoro");
-/** The model and its precision. `voices/kokoro/package.json` fetches the same at install; keep the two alike. */
+/** The model and its precision. `voices/kokoro/fetch-model.mjs` fetches the same at install; keep the two alike. */
 export const KOKORO_MODEL = "onnx-community/Kokoro-82M-v1.0-ONNX";
 const DTYPE = "q8";
 /** Kokoro's best-graded English voice. `SCENES_KOKORO_VOICE` names another (`af_bella`, `bf_emma`, `am_michael`...). */
