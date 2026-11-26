@@ -118,6 +118,9 @@ export function claudeAdapter(options: ClaudeOptions = {}): AgentAdapter {
     signIn: `${name} auth login`,
     // From its own install page.
     install: { command: "curl -fsSL https://claude.ai/install.sh | bash", url: "https://code.claude.com/docs/en/setup" },
+    // Its npm package, which its install page also gives, and its own sign-in.
+    setup: { npm: "@anthropic-ai/claude-code", signIn: ["auth", "login"] },
+    program: where,
     // The CLI's own aliases: each always means that family's newest model.
     models: [
       { id: "haiku", label: "Haiku", tier: "fast" },

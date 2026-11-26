@@ -70,6 +70,9 @@ export function codexAdapter(options: CodexOptions = {}): AgentAdapter {
     signIn: `${name} login`,
     // From its own install page.
     install: { command: "curl -fsSL https://chatgpt.com/codex/install.sh | sh", url: "https://github.com/openai/codex" },
+    // Its npm package, which its install page also gives, and its own sign-in.
+    setup: { npm: "@openai/codex", signIn: ["login"] },
+    program: where,
     defaultEfforts: { work: "high" },
     // What `model_reasoning_effort` takes on the models it lists.
     efforts: [

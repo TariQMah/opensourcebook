@@ -151,6 +151,19 @@ export interface AgentInstall {
   readonly url: string;
 }
 
+/**
+ * What the app's setup can do for an agent with a button, from its own install page: install it with npm, with the
+ * Node Open Sourcebook came with, into Open Sourcebook's own folder; and start its own sign-in, which opens the browser
+ * and which the setup watches until the agent says it is signed in. Open Sourcebook only starts these: the login is
+ * the agent's own, made between it and its provider, and never passes through Open Sourcebook.
+ */
+export interface AgentSetup {
+  /** The npm package its own install page names. */
+  readonly npm?: string;
+  /** The arguments of its own sign-in command. */
+  readonly signIn?: readonly string[];
+}
+
 export interface AgentAdapter {
   readonly id: string;
   /** The name on screen. */
@@ -183,6 +196,10 @@ export interface AgentAdapter {
    * this kind of computer when it gives one. Shown in its "How to connect"; never run by the connector.
    */
   readonly install?: AgentInstall;
+  /** What setup's buttons can do for it; none means it is installed and signed in by hand (`install`, `signIn`). */
+  readonly setup?: AgentSetup;
+  /** Where its program would be started from now: its name on the PATH, or the install place it was found in. */
+  program?(): string;
   info(): Promise<AgentInfo>;
   run(spec: TurnSpec): RunningTurn;
   /** Set when the agent can run inside the box with its shell, files and web (`full`). */
