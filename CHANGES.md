@@ -4,6 +4,8 @@ The newest first. `opensourcebook update` prints the lines here that your copy d
 
 ## 2026-11-26
 
+- Every coding agent in Get set up, the Connect step and Settings > Providers has its own button: Install (Open Sourcebook runs the agent's own install, with no terminal), Get it from its download page, or Sign in. When an agent's desktop app is on your computer but not the part Open Sourcebook runs, its row says so, with its Install button. If a sign-in page shows a code instead of finishing by itself, there is a box to paste it into.
+- Setting up the free voice says it is getting the voice ready, then shows its download as a bar with how many MB of how many.
 - Settings > Backups saves every project in one file, with its sources, chats, plans and everything made, videos included, and restores it here or on another computer. A project you have already is never changed unless you choose: keep both, or replace yours. Files of a linked folder stay where they are; the backup keeps where they were.
 - Settings > Backups can back up every project once a week into the Backups folder of your library, keeping the newest few (four unless you pick another number), and says when the last one was made. It is off until you turn it on, because each backup holds every video you made and goes into your own folder. `opensourcebook backup` makes one now.
 - Settings has Get set up, the same list first-time setup shows (a coding agent, its sign-in, ffmpeg and a voice, each with the button that fixes it), to come back to any time.
