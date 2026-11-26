@@ -26,6 +26,7 @@ import type {
   UsageSink,
 } from "../../src/types";
 import { UploadStore } from "../../src/uploads";
+import type { LocalFiles } from "../../src/local-files";
 import { consumerOptions, type EngineDeps } from "../../src/wiring";
 import { FakeR2Bucket } from "./fake-r2";
 import { ManualClock } from "./job-harness";
@@ -104,6 +105,8 @@ export interface TestEngineOptions {
   skills?: SkillRegistry;
   /** Turns go to the person's own agent through a connector reached with `fetch`. */
   agent?: { fetch: FetchLike; config?: Partial<AgentConfig> };
+  /** This computer's files (the library and linked folders), as the launcher would give them. */
+  localFiles?: LocalFiles;
 }
 
 export function createTestEngine(options: TestEngineOptions = {}): TestEngine & { sent: string[] } {
@@ -116,7 +119,7 @@ export function createTestEngine(options: TestEngineOptions = {}): TestEngine & 
   const extractor = options.extractor ?? new FakeExtractor();
   const provider = recordingProvider(options.answer);
   const registry = options.registry ?? new FormatRegistry();
-  const sources = new SourceService({ repos, extractor, uploads, assets, now: clock.now });
+  const sources = new SourceService({ repos, extractor, uploads, assets, now: clock.now, ...(options.localFiles ? { localFiles: options.localFiles } : {}) });
   const sent: string[] = [];
   const deps: EngineDeps = {
     clientToken: CLIENT_TOKEN,
@@ -140,6 +143,7 @@ export function createTestEngine(options: TestEngineOptions = {}): TestEngine & 
     },
     ...(options.queue ? { queue: { send: async (body) => void sent.push(body.jobId) } } : {}),
     consumer: { now: clock.now, heartbeatMs: 0, log: () => undefined },
+    ...(options.localFiles ? { localFiles: options.localFiles } : {}),
   };
   deps.chat = new ChatService({
     repos,

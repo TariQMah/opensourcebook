@@ -2012,6 +2012,54 @@ the list does not take is `415 unsupported_media_type`, and a file over
 `maxBytes` is `413 upload_too_large`; both messages start with the file's
 name, so a client adding a folder can show one plain line per file.
 
+**A folder linked to a project (Nov 26, 2026; local only).** A copy of a
+folder, as above, does not see later changes. A project can instead be
+linked to a folder on the person's own computer: its files are the
+project's sources, read where they are and never copied into the store
+(`src/sources/folder.ts`). Only an engine started by the launcher on that
+computer can (`LOCAL_FILES_URL`, `cli/local-files.ts`); any other answers
+`501 this_computer_only`, and the web app's proxy refuses linking to a
+paired phone.
+
+| Method | Path | Body | Response |
+|---|---|---|---|
+| `PUT` | `/v1/projects/:id/folder` | `{ path }` | `200 { project, check }`: linked, and looked at at once |
+| `DELETE` | `/v1/projects/:id/folder` | | `200 { project }`: unlinked; its sources stay as they are |
+| `POST` | `/v1/projects/:id/folder/check` | | `200 { project, check }`; `409 no_folder` when it is not linked |
+
+```ts
+interface FolderCheck {
+  folder: string;     // as the computer names it, links followed
+  added: string[];    // paths from the folder
+  changed: string[];  // read again: what the file holds changed
+  missing: string[];  // not there any more; their sources stay, marked missing
+  unchanged: number;
+  failed: Array<{ path: string; message: string }>;
+  skipped: number;    // sound, video, empty, too large, or a kind not taken
+  more: boolean;      // more than 1000 files: none is called missing
+}
+```
+
+The project gains `folder` and `folderCheckedAt`. A source from the folder
+has `origin: "folder"` and `filePath`, and, when it applies, `missingAt`
+and `changedAt`. A check reads only files whose size or change time
+differ; a changed file is read again and its source points at the new
+reading, while the old one stays so a cite made from it still opens. A
+made thing's `GET /v1/outputs/:id` then lists the passages it cites that
+are no longer in their source's text as `changedChunks`, and marks each such
+cite `changed: true`. A file the person removed from the project is not
+added back. The folder's files are taken by the list above, without sound
+and video (`inFolder: false`): a finished video is copied into the linked
+folder itself. A folder that is not there (moved, or its disk not
+connected) is `404 no_folder`. The web app checks when the project is
+opened and when the person asks; the folder is never watched. A hidden
+folder, the whole disk and the Mac's `~/Library` are refused.
+
+**The library (Nov 26, 2026; local only).** `GET /v1/library` → `200 {
+library: { folder, chosen } }`; `PUT /v1/library { folder: string | null }`
+picks it (`null` goes back to the usual `Documents/Open Sourcebook`).
+Nothing in the library is moved, renamed or deleted.
+
 **Google Drive, by a shared link.** Open Sourcebook does not sign in to Google Drive. A
 Drive, Docs, Slides or Sheets link is added like any link (`POST
 /v1/sources { url, projectId }`) and is read as the file it shares, through

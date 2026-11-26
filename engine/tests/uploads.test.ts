@@ -114,7 +114,7 @@ describe("GET /v1/uploads/types and POST /v1/uploads agree", () => {
     expect(response.status).toBe(200);
     const body = (await bodyOf(response)) as { maxBytes: number; types: Array<{ contentType: string; extensions: string[]; group: string }> };
     expect(body.maxBytes).toBe(MAX_UPLOAD_BYTES);
-    expect(body.types).toEqual(UPLOAD_TYPES);
+    expect(body.types).toEqual(UPLOAD_TYPES.map(({ contentType, extensions, group }) => ({ contentType, extensions, group })));
     expect([...new Set(body.types.map((type) => type.group))]).toEqual(["PDF", "slides", "docs", "spreadsheets", "images", "audio", "video"]);
     expect((await handleRequest(new Request("https://engine.test/v1/uploads/types"), engine.deps)).status).toBe(401);
   });

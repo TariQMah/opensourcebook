@@ -55,6 +55,7 @@ import type {
   WorkerExecutionContext,
 } from "./types";
 import { UploadStore } from "./uploads";
+import { localFilesFromEnv, type LocalFiles } from "./local-files";
 import { VideoMakersEngine, type VideoMaker, type VideoMakerRegistry } from "./engines/video/makers";
 import { refreshScenesStatus, ScenesClient } from "./engines/video/scenes/client";
 import { createScenesMaker } from "./engines/video/scenes/maker";
@@ -92,6 +93,8 @@ export interface EngineDeps {
   voiceChosen?: () => Promise<boolean>;
   /** The scenes service on this computer, where the voice is set up (`routes/voice.ts`); absent when it is not configured. */
   scenes?: ScenesClient;
+  /** This computer's files, through the launcher (local-files.ts): the library and linked folders. Absent when deployed. */
+  localFiles?: LocalFiles;
 }
 
 /** Undefined when the worker has no database bound: nothing durable can be done. */
@@ -137,7 +140,8 @@ export function depsForEnv(env: WorkerEnv): EngineDeps | undefined {
     // A guide: written by the person's agent; nothing else to make, the page is drawn from it.
     guide: work ? { makers: [createAgentGuideMaker({ work })] } : {},
   });
-  const sources = new SourceService({ repos, extractor, uploads, assets });
+  const localFiles = localFilesFromEnv(env, fetchImpl);
+  const sources = new SourceService({ repos, extractor, uploads, assets, ...(localFiles ? { localFiles } : {}) });
   const provider = (usage: UsageSink) => createProvider(env, fetchImpl, usage);
   const jobs = new D1GenerationJobStore(env.OPENSOURCEBOOK_JOB_DB);
   const deps: EngineDeps = {
@@ -151,7 +155,16 @@ export function depsForEnv(env: WorkerEnv): EngineDeps | undefined {
     ...(env.OPENSOURCEBOOK_ASSETS ? { bucket: env.OPENSOURCEBOOK_ASSETS } : {}),
     provider,
     runners: {
-      output: new OutputJobRunner({ repos, registry, sources, provider, assets, fetch: fetchImpl, sourceFetch: defaultFetch, ...(work ? { settlePick: workPickSettler(repos, work) } : {}) }),
+      output: new OutputJobRunner({
+        repos,
+        registry,
+        sources,
+        provider,
+        assets,
+        fetch: fetchImpl,
+        sourceFetch: defaultFetch,
+        ...(work ? { settlePick: workPickSettler(repos, work) } : {}),
+      }),
     },
     ...(env.OPENSOURCEBOOK_BYTE_QUEUE ? { queue: env.OPENSOURCEBOOK_BYTE_QUEUE } : {}),
     ...(env.OPENSOURCEBOOK_BYTE_QUEUE && env.OPENSOURCEBOOK_HEAVY_QUEUE ? { heavyQueue: env.OPENSOURCEBOOK_HEAVY_QUEUE } : {}),
@@ -178,6 +191,7 @@ export function depsForEnv(env: WorkerEnv): EngineDeps | undefined {
   if (work) deps.checkAgent = () => work.check();
   if (scenes) deps.checkVoice = () => scenes.voice();
   if (scenes) deps.scenes = scenes;
+  if (localFiles) deps.localFiles = localFiles;
   if (scenes) deps.voiceChosen = voiceChosenFrom(scenes);
   const agent = agentFromEnv(env, fetchImpl);
   deps.chat = new ChatService({

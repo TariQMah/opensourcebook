@@ -71,6 +71,7 @@ describe("migrations", () => {
       "0020_make_times.sql",
       "0021_owner_settings.sql",
       "0022_agent_turn_pick.sql",
+      "0023_folder_sources.sql",
     ]);
     const { db } = setup();
     const tables = (db.raw.prepare("SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name").all() as { name: string }[]).map(

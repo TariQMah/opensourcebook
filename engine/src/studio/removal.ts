@@ -193,6 +193,8 @@ export async function sweepRemovedSources(deps: RemovalDeps, ownerId: string): P
 async function purgeIfUnused(deps: RemovalDeps, source: Source): Promise<boolean> {
   const { repos } = deps;
   if (await repos.sources.isReferenced(source)) return false;
+  // A file of a linked folder the person removed stays as a hidden row, so checking the folder does not add it back.
+  if (source.filePath && source.projectId && (await repos.projects.get(source.projectId))?.folder) return false;
   await repos.sources.purge(source);
   if (source.uploadId && !(await repos.sources.uploadInUse(source.uploadId))) await deps.uploads.deleteUpload(source.uploadId);
   return true;

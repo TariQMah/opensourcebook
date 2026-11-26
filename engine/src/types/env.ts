@@ -48,6 +48,13 @@ export interface WorkerEnv {
   SCENES_SERVICE_URL?: string;
   SCENES_SERVICE_TOKEN?: string;
   /**
+   * The launcher on this computer, which answers for what the local runtime cannot read itself: the library folder
+   * and the files of a folder a project is linked to (cli/local-files.ts). Set by the launcher with its token; a URL
+   * that is not this machine is refused. Unset (a deployed engine), no project can be linked to a folder.
+   */
+  LOCAL_FILES_URL?: string;
+  LOCAL_FILES_TOKEN?: string;
+  /**
    * The connector on this computer that runs the person's own agent
    * (services/agent-connector; DECISIONS #53). Set, every chat turn goes to
    * that agent. Local `.dev.vars` only: a URL that is not this machine is refused.

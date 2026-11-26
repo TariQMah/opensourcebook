@@ -16,6 +16,11 @@ export interface UploadType {
   contentType: string;
   extensions: string[];
   group: string;
+  /**
+   * False when a file of this kind in a linked folder is not taken as a source (#71): sound and video are long to
+   * read, and a finished video is copied into the linked folder itself.
+   */
+  inFolder?: false;
 }
 
 export const UPLOAD_TYPES: readonly UploadType[] = [
@@ -28,8 +33,8 @@ export const UPLOAD_TYPES: readonly UploadType[] = [
   { contentType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", extensions: ["xlsx"], group: "spreadsheets" },
   { contentType: "application/vnd.ms-excel", extensions: ["xls"], group: "spreadsheets" },
   { contentType: "image/*", extensions: ["png", "jpg", "jpeg", "gif", "webp", "heic", "heif"], group: "images" },
-  { contentType: "audio/*", extensions: ["mp3", "m4a", "wav", "aac", "ogg", "flac"], group: "audio" },
-  { contentType: "video/*", extensions: ["mp4", "mov", "m4v", "webm"], group: "video" },
+  { contentType: "audio/*", extensions: ["mp3", "m4a", "wav", "aac", "ogg", "flac"], group: "audio", inFolder: false },
+  { contentType: "video/*", extensions: ["mp4", "mov", "m4v", "webm"], group: "video", inFolder: false },
 ];
 
 /** Whether a content type (no parameters, lower case) is one of the list's. */
@@ -49,6 +54,17 @@ export function contentTypeForName(filename: string | undefined): string | undef
   if (!type) return undefined;
   if (!type.contentType.endsWith("/*")) return type.contentType;
   return NAMED_TYPES[ending];
+}
+
+/**
+ * The content type a file in a linked folder is read as, by its name's ending, when it is a kind taken from a folder;
+ * undefined for any other file, which a check of the folder leaves alone.
+ */
+export function folderContentType(filename: string): string | undefined {
+  const ending = filename.toLowerCase().match(/\.([a-z0-9]+)$/)?.[1];
+  const type = ending ? UPLOAD_TYPES.find((entry) => entry.extensions.includes(ending)) : undefined;
+  if (!type || type.inFolder === false) return undefined;
+  return contentTypeForName(filename) ?? (type.contentType.endsWith("/*") ? undefined : type.contentType);
 }
 
 /** Exact types for the endings listed under a wildcard type. */

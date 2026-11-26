@@ -37,6 +37,8 @@
  *   GET /v1/activity     (what is being made now, the agents' finished turns and what they took)
  *   POST /v1/jobs              GET /v1/jobs/:id   POST /v1/jobs/:id/retry   POST /v1/jobs/:id/cancel
  *   POST /v1/jobs/:id/files/show   (opens the folder a job works in, on this computer)
+ *   PUT|DELETE /v1/projects/:id/folder   POST /v1/projects/:id/folder/check   (a project linked to a folder here)
+ *   GET|PUT /v1/library   (the folder finished videos are copied into)
  *                              (the August API, kept as a wrapper for the iOS app)
  *
  * Every /v1 route but assets needs the client token. The queue handler runs
@@ -49,6 +51,7 @@ import type { JobQueueBatch } from "./jobs/types";
 import { errorResponse, json, notFound } from "./http";
 import { cancelLegacyJob, createJob, getJob, retryLegacyJob } from "./routes/jobs";
 import { showJobFiles } from "./routes/job-files";
+import { checkProjectFolder, getLibrary, linkFolder, setLibrary, unlinkFolder } from "./routes/folders";
 import { listEdgeKinds, listFormats } from "./routes/formats";
 import {
   addEdge,
@@ -173,6 +176,15 @@ async function route(request: Request, deps: EngineDeps | undefined, ctx: Worker
     if (method === "GET") return listProjects(request, deps);
   }
   if (method === "POST" && path === "/v1/projects/import") return importProjectBundle(request, deps);
+  const folder = /^\/v1\/projects\/([^/]+)\/folder(\/check)?$/.exec(path);
+  if (folder) {
+    const id = decodeURIComponent(folder[1]!);
+    if (folder[2] && method === "POST") return checkProjectFolder(request, id, deps);
+    if (!folder[2] && method === "PUT") return linkFolder(request, id, deps);
+    if (!folder[2] && method === "DELETE") return unlinkFolder(request, id, deps);
+  }
+  if (path === "/v1/library" && method === "GET") return getLibrary(request, deps);
+  if (path === "/v1/library" && method === "PUT") return setLibrary(request, deps);
   const making = /^\/v1\/projects\/([^/]+)\/make(\/settle)?$/.exec(path);
   if (making && method === "POST") return makeInProject(request, decodeURIComponent(making[1]!), deps, Boolean(making[2]));
   const project = /^\/v1\/projects\/([^/]+)(?:\/(archive|unarchive|sources|plans|outputs|usage|chats|export))?$/.exec(path);

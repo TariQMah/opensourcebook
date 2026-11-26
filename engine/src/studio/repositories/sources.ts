@@ -36,7 +36,7 @@ const CHUNK_ROWS_PER_INSERT = 20;
 export const EXTRACTION_STATUSES = ["pending", "extracting", "ready", "failed"] as const;
 export type ExtractionStatus = (typeof EXTRACTION_STATUSES)[number];
 
-export const SOURCE_ORIGINS = ["upload", "link", "paste", "share", "discover", "note"] as const;
+export const SOURCE_ORIGINS = ["upload", "link", "paste", "share", "discover", "note", "folder"] as const;
 export type SourceOrigin = (typeof SOURCE_ORIGINS)[number];
 
 export interface SourceExtraction {
@@ -80,6 +80,24 @@ export interface Source {
    * chats and new plan items leave it out; what points at it keeps working.
    */
   removedAt?: string;
+  /** A file in the project's linked folder, read where it is (#71): its whole path on this computer. */
+  filePath?: string;
+  /** The file's size and change time when it was last read; a check reads it again when either differs. */
+  fileSize?: number;
+  fileModifiedMs?: number;
+  /** The file was not in the folder at the last check. The source stays, with what was read from it. */
+  missingAt?: string;
+  /** When it was last read again because the file changed. */
+  changedAt?: string;
+}
+
+/** What a check of a linked folder found of one file (`updateFile`). */
+export interface FilePatch {
+  contentHash?: string;
+  fileSize: number;
+  fileModifiedMs: number;
+  /** It was read again because it changed. */
+  changed?: boolean;
 }
 
 /** A source with its extraction's status, as lists show it. */
@@ -106,6 +124,10 @@ export interface NewSource {
   /** The name an uploaded file came with. */
   fileName?: string;
   origin?: SourceOrigin;
+  /** A file in a linked folder: its whole path, size and change time. */
+  filePath?: string;
+  fileSize?: number;
+  fileModifiedMs?: number;
 }
 
 export interface NewChunk {
@@ -146,6 +168,11 @@ interface SourceRow {
   created_at: string;
   updated_at: string;
   removed_at: string | null;
+  file_path: string | null;
+  file_size: number | null;
+  file_modified_ms: number | null;
+  missing_at: string | null;
+  changed_at: string | null;
   /** The extraction's read title (`SOURCE_SELECT`). */
   read_title: string | null;
 }
@@ -258,7 +285,7 @@ export class SourceRepository {
     const now = this.ctx.now();
     await run(
       this.ctx.db,
-      "INSERT INTO sources (id, owner_id, project_id, content_hash, kind, title, url, upload_id, file_name, origin, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+      "INSERT INTO sources (id, owner_id, project_id, content_hash, kind, title, url, upload_id, file_name, origin, file_path, file_size, file_modified_ms, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
       id,
       input.ownerId,
       nullable(input.projectId),
@@ -269,6 +296,9 @@ export class SourceRepository {
       nullable(input.uploadId),
       nullable(input.fileName),
       nullable(input.origin),
+      nullable(input.filePath),
+      nullable(input.fileSize),
+      nullable(input.fileModifiedMs),
       now,
       now,
     );
@@ -366,6 +396,72 @@ export class SourceRepository {
   /** Removes the user's item; the shared extraction stays for anyone else using it. */
   async delete(id: string): Promise<void> {
     await run(this.ctx.db, "DELETE FROM sources WHERE id = ?", id);
+  }
+
+  /** Every source of the project that is a file in a linked folder, removed ones too, so a check never adds one back. */
+  async listFiles(projectId: string): Promise<Source[]> {
+    return (await all<SourceRow>(this.ctx.db, `${SOURCE_SELECT} WHERE s.project_id = ? AND s.file_path IS NOT NULL ORDER BY s.created_at, s.id`, projectId)).map(sourceFromRow);
+  }
+
+  /**
+   * What a check found of a file that is there: its size and change time, and when it changed, the hash of what it
+   * holds now. The source points at the new content from here on; what was read before stays for the cites made
+   * from it. A file that was missing is not any more.
+   */
+  async updateFile(id: string, patch: FilePatch): Promise<Source | undefined> {
+    const now = this.ctx.now();
+    await run(
+      this.ctx.db,
+      "UPDATE sources SET content_hash = COALESCE(?, content_hash), file_size = ?, file_modified_ms = ?, missing_at = NULL, " +
+        "changed_at = CASE WHEN ? THEN ? ELSE changed_at END, updated_at = ? WHERE id = ?",
+      nullable(patch.contentHash),
+      patch.fileSize,
+      patch.fileModifiedMs,
+      patch.changed ? 1 : 0,
+      now,
+      now,
+      id,
+    );
+    return this.get(id);
+  }
+
+  /** The file was not in the folder: the source stays, said to be missing. Keeps the first time. */
+  async markMissing(id: string): Promise<Source | undefined> {
+    const now = this.ctx.now();
+    await run(this.ctx.db, "UPDATE sources SET missing_at = COALESCE(missing_at, ?), updated_at = ? WHERE id = ?", now, now, id);
+    return this.get(id);
+  }
+
+  /**
+   * Of these chunks, the ones no longer part of their source's text: the source now points at other content (its
+   * file changed and was read again). A cite of one says its passage has changed. A chunk or source not found is
+   * left out, never guessed.
+   */
+  async changedChunks(cites: Array<{ sourceId: string; chunkId: string }>): Promise<Set<string>> {
+    const changed = new Set<string>();
+    const chunkIds = [...new Set(cites.map((cite) => cite.chunkId))];
+    const sourceIds = [...new Set(cites.map((cite) => cite.sourceId))];
+    if (chunkIds.length === 0) return changed;
+    const chunkHash = new Map<string, string>();
+    const sourceHash = new Map<string, string>();
+    for (let start = 0; start < chunkIds.length; start += 90) {
+      const ids = chunkIds.slice(start, start + 90);
+      for (const row of await all<{ id: string; content_hash: string }>(this.ctx.db, `SELECT id, content_hash FROM source_chunks WHERE id IN (${ids.map(() => "?").join(", ")})`, ...ids)) {
+        chunkHash.set(row.id, row.content_hash);
+      }
+    }
+    for (let start = 0; start < sourceIds.length; start += 90) {
+      const ids = sourceIds.slice(start, start + 90);
+      for (const row of await all<{ id: string; content_hash: string }>(this.ctx.db, `SELECT id, content_hash FROM sources WHERE id IN (${ids.map(() => "?").join(", ")})`, ...ids)) {
+        sourceHash.set(row.id, row.content_hash);
+      }
+    }
+    for (const cite of cites) {
+      const was = chunkHash.get(cite.chunkId);
+      const now = sourceHash.get(cite.sourceId);
+      if (was && now && was !== now) changed.add(cite.chunkId);
+    }
+    return changed;
   }
 
   /** Hides a source the person removed but something still points at. Keeps the first time. */
@@ -493,5 +589,10 @@ function sourceFromRow(row: SourceRow): Source {
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     removedAt: opt(row.removed_at),
+    filePath: opt(row.file_path),
+    fileSize: opt(row.file_size),
+    fileModifiedMs: opt(row.file_modified_ms),
+    missingAt: opt(row.missing_at),
+    changedAt: opt(row.changed_at),
   });
 }

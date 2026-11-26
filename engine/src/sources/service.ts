@@ -22,7 +22,8 @@ import type { StudioRepositories } from "../studio/repositories";
 import type { Source, SourceExtraction, SourceOrigin } from "../studio/repositories/sources";
 import type { SourceChunk } from "../studio/types";
 import type { AssetStore } from "../assets";
-import type { UploadStore } from "../uploads";
+import { folderContentType, type StoredUpload, type UploadStore } from "../uploads";
+import { splitPath, type LocalFiles } from "../local-files";
 import type { StructuredProvider } from "../types/provider";
 import { SOURCE_KINDS, type ExtractionRequest, type SourceEnvelope, type SourceKind } from "../types/source";
 import { chunkEnvelope, type Chunker } from "./chunk";
@@ -90,6 +91,8 @@ export interface SourceServiceOptions {
   extractor: Extractor;
   uploads: UploadStore;
   assets?: AssetStore;
+  /** This computer's files, for a source that is a file in a linked folder (#71); absent, such a source is not read again. */
+  localFiles?: LocalFiles;
   chunker?: Chunker;
   now?: () => number;
 }
@@ -167,7 +170,7 @@ export class SourceService {
    * `contextText` is a caption shared with a link; it reaches the extractor
    * only on the first extraction of that content.
    */
-  async ensureExtracted(source: Source, options: { provider?: StructuredProvider; contextText?: string } = {}): Promise<ExtractedSource> {
+  async ensureExtracted(source: Source, options: ExtractOptions = {}): Promise<ExtractedSource> {
     const cached = await this.repos.sources.getExtraction(source.contentHash);
     if (cached?.status === "ready" && cached.envelope) {
       return { source, envelope: cached.envelope, chunks: await this.repos.sources.listChunks(source.contentHash), extracted: false };
@@ -201,7 +204,7 @@ export class SourceService {
     }
   }
 
-  private async extract(source: Source, options: { provider?: StructuredProvider; contextText?: string }): Promise<SourceEnvelope> {
+  private async extract(source: Source, options: ExtractOptions): Promise<SourceEnvelope> {
     const kind = isSourceKind(source.kind) ? source.kind : "unknown";
     const sourceText = options.contextText?.trim() ?? "";
     const common = {
@@ -211,6 +214,14 @@ export class SourceService {
       ...(this.options.assets ? { assetStore: this.options.assets } : {}),
       now: () => new Date(this.now()).toISOString(),
     };
+    if (options.file) return this.options.extractor.extract({ ...common, uploadBytes: options.file });
+    if (source.filePath && !source.uploadId) {
+      // A file in a linked folder is read where it is, never copied into the store.
+      if (!this.options.localFiles) throw new SourceInputError("files_unavailable", "This source is a file on the computer Open Sourcebook runs on, and can be read again only there.", 409);
+      const { folder, name } = splitPath(source.filePath);
+      const bytes = await this.options.localFiles.read(folder, name);
+      return this.options.extractor.extract({ ...common, uploadBytes: { bytes, contentType: fileContentType(name), filename: name } });
+    }
     if (source.uploadId) {
       const upload = await this.options.uploads.getUpload(source.uploadId);
       if (!upload) throw new SourceInputError("upload_not_found", `Upload ${source.uploadId} does not exist.`, 404);
@@ -240,7 +251,7 @@ export class SourceService {
     if (uploadId) {
       const upload = await this.options.uploads.getUpload(uploadId);
       if (!upload) throw new SourceInputError("upload_not_found", `Upload ${uploadId} does not exist.`, 404);
-      const kind = upload.contentType === "application/pdf" ? "pdf" : (input.kind ?? (isTextFile(upload.contentType, upload.filename) ? "text" : "unknown"));
+      const kind = fileKind(upload.contentType, upload.filename, input.kind);
       return {
         contentHash: `upload:${await sha256Hex(upload.bytes)}`,
         kind,
@@ -266,6 +277,23 @@ export class SourceService {
     }
     throw new SourceInputError("source_required", "A url, text or uploadId is required");
   }
+}
+
+/** How a source is read and named. `file`: the bytes already in hand (a check of a linked folder just read them). */
+export interface ExtractOptions {
+  provider?: StructuredProvider;
+  contextText?: string;
+  file?: StoredUpload;
+}
+
+/** The kind of source a file is, from its type and name, unless one was asked for. */
+export function fileKind(contentType: string, filename: string | undefined, asked?: SourceKind): SourceKind {
+  return contentType === "application/pdf" ? "pdf" : (asked ?? (isTextFile(contentType, filename) ? "text" : "unknown"));
+}
+
+/** The type a linked folder's file is read as, by its name (the same list uploads are checked against). */
+function fileContentType(name: string): string {
+  return folderContentType(name) ?? "application/octet-stream";
 }
 
 function isSourceKind(value: unknown): value is SourceKind {

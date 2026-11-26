@@ -33,6 +33,12 @@ export interface Project {
   createdAt: string;
   updatedAt: string;
   archivedAt?: string;
+  /** The folder on this computer the project is linked to (#71): its files are sources read where they are. */
+  folder?: string;
+  /** When the linked folder was last looked at. */
+  folderCheckedAt?: string;
+  /** The name of the project's folder in the library, kept from the first video copied there. */
+  libraryName?: string;
 }
 
 export interface NewProject {
@@ -63,6 +69,9 @@ interface ProjectRow {
   created_at: string;
   updated_at: string;
   archived_at: string | null;
+  folder_path: string | null;
+  folder_checked_at: string | null;
+  library_name: string | null;
 }
 
 export class ProjectRepository {
@@ -146,6 +155,23 @@ export class ProjectRepository {
     return this.get(id);
   }
 
+  /** Links the project to a folder on this computer, or unlinks it (`null`); its sources stay either way. */
+  async linkFolder(id: string, folder: string | null): Promise<Project | undefined> {
+    await run(this.ctx.db, "UPDATE projects SET folder_path = ?, folder_checked_at = NULL, updated_at = ? WHERE id = ?", folder, this.ctx.now(), id);
+    return this.get(id);
+  }
+
+  /** Notes that the linked folder was just looked at. Not a change to the project, so its place in lists stays. */
+  async folderChecked(id: string): Promise<void> {
+    await run(this.ctx.db, "UPDATE projects SET folder_checked_at = ? WHERE id = ?", this.ctx.now(), id);
+  }
+
+  /** Keeps the name of the project's folder in the library, the first time only; the name kept is returned. */
+  async keepLibraryName(id: string, name: string): Promise<string | undefined> {
+    await run(this.ctx.db, "UPDATE projects SET library_name = COALESCE(library_name, ?) WHERE id = ?", name, id);
+    return (await this.get(id))?.libraryName;
+  }
+
   /** Its sources go back to the Inbox; chats and plans go with it (0004 foreign keys). */
   async delete(id: string): Promise<void> {
     await run(this.ctx.db, "DELETE FROM projects WHERE id = ?", id);
@@ -164,5 +190,8 @@ function fromRow(row: ProjectRow): Project {
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     archivedAt: opt(row.archived_at),
+    folder: opt(row.folder_path),
+    folderCheckedAt: opt(row.folder_checked_at),
+    libraryName: opt(row.library_name),
   });
 }

@@ -6,7 +6,9 @@
  *   GET /v1/plans/:id/outputs       → 200 { outputs }                 item run order, newest first per item
  *   GET /v1/outputs/:id             → 200 { output }                  with payload, citations, prompt, settings, sources,
  *                                                                     remakesScene when one of its scenes can be made again,
- *                                                                     remakeOf when it is such a remake
+ *                                                                     remakeOf when it is such a remake, and
+ *                                                                     changedChunks (each such cite `changed`) when a
+ *                                                                     passage it cites changed in its file since
  *   PUT /v1/outputs/:id/payload     → 200 { output }                  changed by hand, for a format that takes it (a guide)
  *   GET /v1/projects/:id/usage      → 200 { usage }
  *   GET /v1/plans/:id/usage         → 200 { usage, items: [{ id, usage }] }
@@ -18,7 +20,7 @@
  */
 import { authenticate, errorResponse, json, notFound, pageBody, pageParams, readJsonObject } from "../http";
 import type { PlacedOutput } from "../studio/repositories";
-import { isFormatId } from "../studio/types";
+import { isFormatId, type Citation } from "../studio/types";
 import type { EngineDeps } from "../wiring";
 import { ownedPlan } from "./plans";
 import { ownedProject } from "./projects";
@@ -55,7 +57,25 @@ export async function getOutput(request: Request, id: string, deps: EngineDeps):
   const made = await deps.jobs.findByOutput?.(output.id);
   const remade = made ? remakeOfJob(made) : undefined;
   const remakesScene = (deps.registry.get(served.type)?.remakeScene?.scenes(served.payload).length ?? 0) > 0;
-  return json({ output: { ...fullOutput(deps, served), ...(remakesScene ? { remakesScene: true } : {}), ...(remade ? { remakeOf: { outputId: remade.outputId, scene: remade.scene } } : {}) } });
+  const full = fullOutput(deps, served);
+  const changed = await changedCites(deps, served.citations);
+  return json({
+    output: {
+      ...full,
+      ...(changed.size > 0 ? { citations: served.citations.map((cite) => (cite.chunkId && changed.has(cite.chunkId) ? { ...cite, changed: true } : cite)), changedChunks: [...changed] } : {}),
+      ...(remakesScene ? { remakesScene: true } : {}),
+      ...(remade ? { remakeOf: { outputId: remade.outputId, scene: remade.scene } } : {}),
+    },
+  });
+}
+
+/**
+ * The passages this output cites that are no longer in their source's text: the source is a file of a linked folder
+ * that changed and was read again (#71). Its cites still open the passage as it was; they say it has changed.
+ */
+async function changedCites(deps: EngineDeps, citations: Citation[]): Promise<Set<string>> {
+  const cites = citations.filter((cite): cite is Citation & { chunkId: string } => typeof cite.chunkId === "string" && cite.chunkId.length > 0);
+  return cites.length > 0 ? deps.repos.sources.changedChunks(cites) : new Set();
 }
 
 /**
