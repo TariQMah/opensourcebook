@@ -100,7 +100,7 @@ test("an installed copy's video work folder, under ~/.opensourcebook, is a works
   assert.match(problem("/Users/ann/.opensourcebook/state/x")!, /top of the home folder/);
   assert.match(problem("/Users/ann/.npm/x")!, /top of the home folder/, "other dot folders stay refused");
   // Settings, logins and keys: refused even when a root was set up there.
-  for (const dir of [".ssh", ".gnupg", ".aws", ".claude", ".codex", ".config", ".gemini", ".cursor", ".docker", ".kube", "Library/Application Support"]) {
+  for (const dir of [".ssh", ".gnupg", ".aws", ".claude", ".codex", ".config", ".gemini", ".cursor", ".docker", ".kube"]) {
     const set = `/Users/ann/${dir}/opensourcebook`;
     assert.match(problem(`${set}/job1/work`, [set])!, /own settings/, dir);
   }
@@ -109,6 +109,24 @@ test("an installed copy's video work folder, under ~/.opensourcebook, is a works
   assert.match(problem("/Users/ann/.opensourcebook/job/work", ["/"])!, /top of the home folder/, "nor a folder above it");
   // A developer's copy in a plain folder needs no root.
   assert.deepEqual(judgeWorkspace("/Users/ann/code/opensourcebook/services/scenes/.data/job1/work", home, temps), { path: "/Users/ann/code/opensourcebook/services/scenes/.data/job1/work" });
+});
+
+test("the desktop app's jobs folder, in ~/Library/Application Support, is a workspace when the connector was set up with it; the rest of ~/Library stays refused", () => {
+  const home = "/Users/ann";
+  const temps = ["/private/var/folders/ab/cd/T", "/private/tmp"];
+  const root = "/Users/ann/Library/Application Support/Open Sourcebook/jobs";
+  const work = `${root}/job1/work`;
+  const problem = (path: string, roots: string[] = [root]) => (judgeWorkspace(path, home, temps, roots) as { problem?: string }).problem;
+  assert.deepEqual(judgeWorkspace(work, home, temps, [root]), { path: work });
+  assert.match(problem(work, [])!, /own settings/, "not without the connector being set up with it");
+  assert.match(problem(root)!, /own settings/, "never the root itself");
+  assert.match(problem("/Users/ann/Library/Application Support/Open Sourcebook/state/x")!, /own settings/, "the rest of the app's data folder stays refused");
+  assert.match(problem("/Users/ann/Library/Application Support/Other/x/y")!, /own settings/, "another app's folder stays refused");
+  assert.match(problem("/Users/ann/Library/Keychains/x/y")!, /own settings/);
+  assert.match(problem(`${root}/job1/.claude/x`)!, /own settings/, "a settings folder inside the root");
+  // A root of ~/Library itself, or one folder in it, opens nothing there.
+  assert.match(problem("/Users/ann/Library/Caches/x/y", ["/Users/ann/Library"])!, /own settings/);
+  assert.match(problem("/Users/ann/Library/Application Support/x/y", ["/Users/ann/Library/Application Support"])!, /own settings/);
 });
 
 test("on disk, the installed layout's work folder is a workspace when its root is named, through links too", () => {

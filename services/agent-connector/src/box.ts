@@ -165,11 +165,13 @@ const SETTINGS = /(^|[\\/])\.(claude|codex|gemini|cursor|copilot|ssh|gnupg|aws|c
 /**
  * The workspace a caller asked for, checked: an existing folder, by its real path, at least two levels inside the home
  * folder or inside a temporary folder (this user's own, or /private/tmp), and never the home folder, a folder above it,
- * or a place a program keeps its own state: not ~/Library (the apps' own data), no agent's or tool's settings folder at
+ * or a place a program keeps its own state: not ~/Library (the apps' own data) unless inside one of `roots`, no agent's or tool's settings folder at
  * any depth (`SETTINGS`), and no dot folder at the top of the home folder (~/.kube, ~/.local, any of them: where tools
  * keep settings and logins) unless the workspace is inside one of `roots`. Those are the work folders this connector
  * was set up with in its own environment, never by a request (the scenes service's, OPENSOURCEBOOK_CONNECTOR_SCENES_ROOTS):
- * an installed copy keeps them in `~/.opensourcebook/app/services/scenes/.data`. A dot folder deeper inside a project is
+ * an installed copy keeps them in `~/.opensourcebook/app/services/scenes/.data`, the desktop app in its data folder,
+ * `~/Library/Application Support/Open Sourcebook/jobs` (docs/JOB-FOLDER.md). Under ~/Library only a workspace inside
+ * such a root is allowed, and a root there counts only three levels down or deeper; the rest of ~/Library stays refused. A dot folder deeper inside a project is
  * fine: Open Sourcebook's video maker works in `services/scenes/.data/<job>/work`.
  */
 export function checkWorkspace(path: unknown, home: string = homedir(), temp: string = tmpdir(), roots: readonly string[] = []): { path: string } | { problem: string } {
@@ -196,9 +198,11 @@ export function judgeWorkspace(real: string, home: string, temps: readonly strin
     const inside = relative(home, real);
     const parts = inside.split(sep);
     if (parts.length < 2) return { problem: own };
-    if (parts[0] === "Library" || SETTINGS.test(inside)) return { problem: "workspace.path can't be inside an agent's, a tool's or an app's own settings." };
-    // A root is trusted only inside the home folder and below it, never the home folder itself.
-    const inRoot = roots.some((root) => within(root, home) && root !== home && within(real, root) && real !== root);
+    // A root is trusted only inside the home folder and below it, never the home folder itself, and under ~/Library only
+    // as an app's own folder there or deeper (~/Library/Application Support/Open Sourcebook/jobs), never ~/Library itself.
+    const rooted = (root: string) => within(root, home) && root !== home && (relative(home, root).split(sep)[0] !== "Library" || relative(home, root).split(sep).length >= 3);
+    const inRoot = roots.some((root) => rooted(root) && within(real, root) && real !== root);
+    if (SETTINGS.test(inside) || (parts[0] === "Library" && !inRoot)) return { problem: "workspace.path can't be inside an agent's, a tool's or an app's own settings." };
     if (parts[0]!.startsWith(".") && !inRoot) return { problem: `workspace.path can't be inside ${parts[0]} at the top of the home folder, where programs keep their own settings, unless it is inside one of the work folders this connector was set up with.` };
     return { path: real };
   }
