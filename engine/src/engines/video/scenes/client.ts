@@ -219,7 +219,7 @@ export interface VoiceServiceView {
   keySet?: boolean;
   keyHint?: string;
   installed?: boolean;
-  install?: { command: string; folder: string };
+  install?: { command: string; folder?: string };
   listsVoices: boolean;
   /** Whether it offers a sample of its voices to hear; when not, each of its voices says `sample: false`. */
   samples: boolean;
@@ -455,7 +455,7 @@ const TROUBLES: readonly VoiceTrouble[] = ["credits", "refused", "unreachable"];
 /** A service view, field by field: anything else the service sent (never a key) is left behind. */
 function readServiceView(value: unknown): VoiceServiceView | undefined {
   if (!isRecord(value) || !text(value.id) || !text(value.label)) return undefined;
-  const install = isRecord(value.install) && text(value.install.command) && text(value.install.folder) ? { command: text(value.install.command)!, folder: text(value.install.folder)! } : undefined;
+  const install = isRecord(value.install) && text(value.install.command) ? { command: text(value.install.command)!, ...(text(value.install.folder) ? { folder: text(value.install.folder)! } : {}) } : undefined;
   const health = isRecord(value.health)
     ? value.health.ok === true
       ? { ok: true as const }
