@@ -12,6 +12,7 @@
  * nothing later. The keys are made new at each start and never written to disk.
  */
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
+import { writePrivate } from "./secrets.ts";
 
 export const OPEN_CODE_LIFE_MS = 10 * 60_000;
 /** At most this many codes are open at once; making another drops the oldest. */
@@ -66,4 +67,22 @@ export class OpenCodes {
 export function openAddress(web: string, code: string, to = "/"): string {
   const path = to.startsWith("/") && !to.startsWith("//") ? to : "/";
   return `${web.replace(/\/$/, "")}/api/open?code=${encodeURIComponent(code)}&to=${encodeURIComponent(path)}`;
+}
+
+/**
+ * Set by an app that shows Open Sourcebook in its own window (the desktop app, desktop/): a fresh page a tab from an
+ * earlier run asks for is that window's to show, not the browser's. The launcher then writes `{ to, at }` in this file
+ * instead of opening the browser, and the app, watching it, lets its window in again with its own new code. The file
+ * holds no code, so nothing that lets a browser in is ever on the disk.
+ */
+export const OWN_WINDOW_ENV = "OPENSOURCEBOOK_REOPEN_FILE";
+
+/** Asks the app's own window for a fresh page of `to`; false when the file could not be written. */
+export function askOwnWindow(file: string, to: string, now: Date = new Date()): boolean {
+  try {
+    writePrivate(file, `${JSON.stringify({ to, at: now.toISOString() })}\n`);
+    return true;
+  } catch {
+    return false;
+  }
 }

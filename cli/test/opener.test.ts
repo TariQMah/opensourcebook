@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
-import { OPEN_CODE_LIFE_MS, OpenCodes, newRunKeys, openAddress } from "../opener.ts";
+import { OPEN_CODE_LIFE_MS, OpenCodes, askOwnWindow, newRunKeys, openAddress } from "../opener.ts";
 import { Phone } from "../phone.ts";
 
 test("opener: a code lets a browser in once, runs out, and only codes the launcher made work", () => {
@@ -48,5 +48,17 @@ test("opener: the launcher's control makes and checks codes, only with its token
   } finally {
     await phone.stop();
     rmSync(home, { recursive: true, force: true });
+  }
+});
+
+test("an app's own window is asked for a fresh page in its file: the page and when, and no code that lets a browser in", () => {
+  const dir = mkdtempSync(join(tmpdir(), "opensourcebook-window-"));
+  try {
+    const file = join(dir, "reopen.json");
+    assert.equal(askOwnWindow(file, "/projects/p1", new Date("2026-11-26T08:00:00.000Z")), true);
+    assert.deepEqual(JSON.parse(readFileSync(file, "utf8")), { to: "/projects/p1", at: "2026-11-26T08:00:00.000Z" });
+    assert.equal(askOwnWindow(join(file, "under-a-file.json"), "/"), false, "a file is no folder");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
   }
 });

@@ -9,7 +9,7 @@ import { appendFileSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { launchArgs } from "./build.ts";
 import { releasePorts } from "./ports.ts";
-import { OpenCodes, openAddress } from "./opener.ts";
+import { askOwnWindow, OpenCodes, openAddress, OWN_WINDOW_ENV } from "./opener.ts";
 import { BackupSchedule } from "./backups.ts";
 import { LocalFiles } from "./local-files.ts";
 import { VoiceInstalls } from "./voice.ts";
@@ -245,8 +245,11 @@ export async function run(w: Wiring, options: RunOptions, programs: Program[] = 
     backups = new BackupSchedule({ state: w.home, engine: url(w, "engine"), token: w.secrets.OPENSOURCEBOOK_CLIENT_TOKEN, say: note });
     backups.start();
   }
+  // A tab from an earlier run asks for a fresh page: the browser opens one, or an app's own window shows it (opener.ts).
+  const ownWindow = w.env[OWN_WINDOW_ENV]?.trim();
+  const reopen = (to: string) => (ownWindow ? askOwnWindow(ownWindow, to) : openInBrowser(openAddress(frontUrl, openCodes.issue().code, to)));
   if (w.ports.phone && w.ports["phone-control"] && w.ports.web) {
-    phone = new Phone({ home: w.home, webPort: w.ports.web, doorPort: w.ports.phone, controlPort: w.ports["phone-control"], token: w.secrets.PHONE_TOKEN, say, ansi, openCodes, voices: new VoiceInstalls({ root: w.root, home: w.home }), setup, ...(backups ? { backups } : {}), reopen: (to) => openInBrowser(openAddress(frontUrl, openCodes.issue().code, to)), ...(w.keys ? { keys: w.keys } : {}) });
+    phone = new Phone({ home: w.home, webPort: w.ports.web, doorPort: w.ports.phone, controlPort: w.ports["phone-control"], token: w.secrets.PHONE_TOKEN, say, ansi, openCodes, voices: new VoiceInstalls({ root: w.root, home: w.home }), setup, ...(backups ? { backups } : {}), reopen, ...(w.keys ? { keys: w.keys } : {}) });
     try {
       await phone.start(options.phone ?? phoneChoice(w.home));
     } catch (error) {
