@@ -33,6 +33,8 @@ export interface Wiring {
 
 /** Where the scenes service keeps its jobs and its video agent's work folders. */
 export const scenesData = (w: Wiring) => w.env.SCENES_DATA_DIR?.trim() || join(w.root, "services", "scenes", ".data");
+/** Where the scenes service keeps its job folders: SCENES_JOBS_DIR, else inside its data folder. */
+export const scenesJobs = (w: Wiring) => w.env.SCENES_JOBS_DIR?.trim() || scenesData(w);
 
 export interface Health {
   path: string;
@@ -150,7 +152,7 @@ export const PROGRAMS: Program[] = [
         OPENSOURCEBOOK_USAGE_LOG: join(w.home, "logs", "usage.jsonl"),
         // The scenes service holds a narrower token: turns only in its own folder, and only its own turns.
         OPENSOURCEBOOK_CONNECTOR_SCENES_TOKEN: w.secrets.SCENES_CONNECTOR_TOKEN,
-        OPENSOURCEBOOK_CONNECTOR_SCENES_ROOTS: scenesData(w),
+        OPENSOURCEBOOK_CONNECTOR_SCENES_ROOTS: scenesJobs(w),
       },
     }),
     health: (w) => ({ path: "/status", token: w.secrets.OPENSOURCEBOOK_CONNECTOR_TOKEN }),

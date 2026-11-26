@@ -22,7 +22,8 @@ test("with an app data folder, the state, the engine's data and the video jobs a
   const env: NodeJS.ProcessEnv = { OPENSOURCEBOOK_APP_DATA: data };
   useAppData(env);
   assert.equal(env.OPENSOURCEBOOK_STATE, join(data, "state"));
-  assert.equal(env.SCENES_DATA_DIR, join(data, "jobs"));
+  assert.equal(env.SCENES_JOBS_DIR, join(data, "jobs"));
+  assert.equal(env.SCENES_DATA_DIR, join(data, "scenes"));
   assert.equal(stateFolder(root, env), join(data, "state"));
   assert.equal(engineState(join(root, "engine"), env), join(data, "data"));
   const w: Wiring = { root, home: join(data, "state"), ports, secrets, env };
@@ -45,5 +46,6 @@ test("without one, everything stays where a clone always kept it, and a setting 
   const named: NodeJS.ProcessEnv = { OPENSOURCEBOOK_APP_DATA: data, SCENES_DATA_DIR: "/elsewhere/jobs" };
   useAppData(named);
   assert.equal(named.SCENES_DATA_DIR, "/elsewhere/jobs");
+  assert.equal(named.SCENES_JOBS_DIR, undefined);
   assert.equal(named.OPENSOURCEBOOK_STATE, join(data, "state"));
 });

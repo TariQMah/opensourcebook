@@ -245,7 +245,7 @@ async function startClaimed(options: Options): Promise<number> {
  * service's jobs) are made readable by that person only, like `.opensourcebook/`, wherever the copy of Open Sourcebook sits.
  */
 export function keepPrivate(root: string, env: NodeJS.ProcessEnv = process.env): void {
-  for (const dir of [appDataOf(env) ? engineState(join(root, "engine"), env) : join(root, "engine", ".wrangler"), env.SCENES_DATA_DIR?.trim() || join(root, "services", "scenes", ".data")]) {
+  for (const dir of [appDataOf(env) ? engineState(join(root, "engine"), env) : join(root, "engine", ".wrangler"), env.SCENES_DATA_DIR?.trim() || join(root, "services", "scenes", ".data"), ...(env.SCENES_JOBS_DIR?.trim() ? [env.SCENES_JOBS_DIR.trim()] : [])]) {
     try {
       mkdirSync(dir, { recursive: true, mode: 0o700 });
       chmodSync(dir, 0o700);
