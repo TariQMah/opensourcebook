@@ -144,6 +144,14 @@ describe("/api/launcher, to what only the launcher can do", () => {
     expect(evil.status).toBe(403);
     expect(calls).toHaveLength(1);
   });
+
+  test("a POST's JSON body goes along to the launcher, with its type", async () => {
+    const { calls, fetchImpl } = engine(200, { state: "signingIn" });
+    const sent = JSON.stringify({ code: "abc#123" });
+    await proxy(new Request("https://web.test/api/launcher/agents/pal/sign-in/code", { method: "POST", headers: { origin: "https://web.test", "content-type": "application/json" }, body: sent }), withPhone, fetchImpl);
+    expect(new TextDecoder().decode(calls[0]?.init.body as ArrayBuffer)).toBe(sent);
+    expect(new Headers(calls[0]?.init.headers).get("content-type")).toBe("application/json");
+  });
 });
 
 describe("who may use the engine through this proxy", () => {

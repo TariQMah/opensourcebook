@@ -346,9 +346,13 @@ async function phone(request: Request, url: URL, env: ProxyEnv, fetchImpl: typeo
   }
   let upstream: Response;
   try {
+    // A POST's small JSON body goes along (the code a sign-in page shows, pasted by the person).
+    const body = request.method === "POST" ? await request.arrayBuffer() : undefined;
+    const type = request.headers.get("content-type");
     upstream = await fetchImpl(new URL(url.pathname.slice(PREFIX.length - 1), env.PHONE_URL).toString(), {
       method: request.method,
-      headers: { "x-phone-token": env.PHONE_TOKEN },
+      headers: { "x-phone-token": env.PHONE_TOKEN, ...(body?.byteLength && type ? { "content-type": type } : {}) },
+      ...(body?.byteLength ? { body } : {}),
       redirect: "manual",
     });
   } catch {
