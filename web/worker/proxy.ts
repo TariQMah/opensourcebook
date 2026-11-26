@@ -165,6 +165,8 @@ export async function proxy(
   if (who !== "browser" && opensFiles(url.pathname)) return error(403, "this_computer_only", "A job's files open only in the browser on the computer Open Sourcebook runs on.");
   // Naming a folder on this computer (a project's linked folder, the library) is for the person at it, never a phone.
   if (who !== "browser" && namesFolder(request.method, url.pathname)) return error(403, "this_computer_only", "A folder is picked only in the browser on the computer Open Sourcebook runs on.");
+  // A backup holds every project, and restoring one writes them: for this computer, never a paired phone.
+  if (who === "device" && backsUp(url.pathname)) return error(403, "this_computer_only", "Backing up and restoring are only in the browser on the computer Open Sourcebook runs on.");
   if (!METHODS.has(request.method)) return error(405, "method_not_allowed", "Method not allowed.");
   if (request.method !== "GET" && request.method !== "HEAD" && crossSite(request, url)) {
     return error(403, "cross_site", "Requests must come from this site.");
@@ -224,6 +226,17 @@ function namesFolder(method: string, path: string): boolean {
   }
   plain = plain.replace(/\/+$/, "").toLowerCase();
   return /\/v1\/projects\/[^/]+\/folder$/.test(plain) || /\/v1\/library$/.test(plain);
+}
+
+/** Whether a path backs up every project or restores a backup (`/v1/backup`, `/v1/backup/restores/...`), however it is spelled. */
+function backsUp(path: string): boolean {
+  let plain = path;
+  try {
+    plain = decodeURIComponent(path);
+  } catch {
+    // A path that does not decode is judged as it is.
+  }
+  return /\/v1\/+backup(\/|$)/i.test(plain.replace(/\/+$/, ""));
 }
 
 /** Where `/api/open` goes once the browser is in: a path of this app, never another site. */

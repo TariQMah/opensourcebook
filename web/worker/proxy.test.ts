@@ -226,6 +226,21 @@ describe("who may use the engine through this proxy", () => {
     expect(calls.at(-1)!.url).toBe("http://engine.test/v1/projects/p1/folder");
   });
 
+  test("backing up and restoring are only for this computer: the door is refused, however the path is spelled", async () => {
+    const { calls, fetchImpl } = engine(200, {});
+    const door = { "x-opensourcebook-door": "door-key-of-this-run" };
+    const refused: Array<[string, string]> = [["GET", "/api/v1/backup"], ["GET", "/api/v1/BACKUP/"], ["POST", "/api/v1/backup/restores"], ["POST", "/api/v1/backup%2Frestores/r1"], ["DELETE", "/api/v1//backup/restores/r1"]];
+    for (const [method, path] of refused) {
+      const res = await proxy(new Request(`${at}${path}`, { method, headers: { ...door, ...browser } }), run, fetchImpl);
+      expect(res.status, `${method} ${path}`).toBe(403);
+    }
+    expect(calls).toHaveLength(0);
+    expect((await proxy(new Request(`${at}/api/v1/backups-elsewhere`, { headers: { ...door, ...browser } }), run, fetchImpl)).status).not.toBe(403);
+    const res = await proxy(new Request(`${at}/api/v1/backup`, { headers: browser }), run, fetchImpl);
+    expect(res.status).toBe(200);
+    expect(calls.at(-1)!.url).toBe("http://engine.test/v1/backup");
+  });
+
   test("the launcher's own check holds the engine token and reaches the engine, not the phone", async () => {
     const { fetchImpl } = engine();
     const tool = { authorization: "Bearer secret-token" };
