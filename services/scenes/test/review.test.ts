@@ -189,6 +189,15 @@ test("a request may turn the fresh viewer on or off for itself, and nothing else
   assert.ok("problems" in wrong && wrong.problems.some((p) => p.startsWith("review:")));
 });
 
+test("a request may ask to draw faster, and nothing else is taken for it", () => {
+  const base = { id: "r1", title: "Levers", passages: [{ id: "p1", sourceId: "s", sourceTitle: "t", text: "words" }] };
+  const on = readRequest({ ...base, faster: true }, ["flat"]);
+  assert.ok("request" in on && on.request.faster === true);
+  for (const off of [readRequest({ ...base, faster: false }, ["flat"]), readRequest(base, ["flat"])]) assert.ok("request" in off && !("faster" in off.request));
+  const wrong = readRequest({ ...base, faster: "yes" }, ["flat"]);
+  assert.ok("problems" in wrong && wrong.problems.some((p) => p.startsWith("faster:")));
+});
+
 test("a turn's own model and effort go over the ones set for videos, and leave them alone when not named", async () => {
   const sent: any[] = [];
   const fetchImpl = (async (url: string, init?: RequestInit) => {

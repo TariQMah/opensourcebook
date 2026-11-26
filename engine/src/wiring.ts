@@ -43,6 +43,7 @@ import type { FormatRegistry } from "./studio/registry";
 import { timeBucket } from "./studio/timing";
 import type { FormatDescriptor } from "./studio/types";
 import { createStudioRepositories, type StudioRepositories } from "./studio/repositories";
+import { drawFasterFrom } from "./routes/drawing";
 import type {
   BrowserBindingLike,
   BrowserRenderingBindingLike,
@@ -119,7 +120,7 @@ export function depsForEnv(env: WorkerEnv): EngineDeps | undefined {
   // Cost estimates are priced for the model that writes flashcards, quiz and video text.
   const price = writingModelPrice(env);
   // Video makers (DECISIONS #54, #69); each is set up only when its own config is. With none, video is not made here.
-  const makers = videoMakersFromEnv(env, fetchImpl, madeInFrom(repos, "video", () => registry.descriptor("video")));
+  const makers = videoMakersFromEnv(env, fetchImpl, madeInFrom(repos, "video", () => registry.descriptor("video")), drawFasterFrom(repos));
   // Flashcards and quizzes: the person's own agent when it is connected, and Open Sourcebook's own writer when a model key is set.
   const work = agentWorkFromEnv(env, fetchImpl);
   const api = createProvider(env, fetchImpl, { record: () => undefined }) !== undefined;
@@ -259,9 +260,9 @@ let scenesAnnounced = false;
  * SCENES_SERVICE_URL and SCENES_SERVICE_TOKEN; local only, so a service that
  * is not on this machine is refused. Said once per isolate.
  */
-export function videoMakersFromEnv(env: WorkerEnv, fetchImpl: FetchLike, madeIn?: MadeIn): VideoMaker[] {
+export function videoMakersFromEnv(env: WorkerEnv, fetchImpl: FetchLike, madeIn?: MadeIn, drawFaster?: (ownerId?: string) => Promise<boolean>): VideoMaker[] {
   const client = scenesClientFromEnv(env, fetchImpl);
-  return client ? [createScenesMaker({ client, ...(madeIn ? { madeIn } : {}) })] : [];
+  return client ? [createScenesMaker({ client, ...(madeIn ? { madeIn } : {}), ...(drawFaster ? { drawFaster } : {}) })] : [];
 }
 
 /** Whether a voice service is chosen in the scenes service's voice setup (from the app or its environment). */

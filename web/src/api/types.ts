@@ -1174,6 +1174,13 @@ export interface SetupState {
   voice: { set: boolean; skipped: boolean };
 }
 
+// Drawing a video (GET /v1/drawing)
+
+export interface DrawingSettings {
+  /** "Use more of my computer to make videos faster": most of the computer at normal priority; off, about half of it at low priority. */
+  faster: boolean;
+}
+
 // Sources (GET /v1/uploads/types)
 
 /** A kind of file the engine reads, with its plain group word ("PDF", "slides", "images"). */

@@ -114,7 +114,13 @@ export const run: Group = {
       async run(ctx) {
         mustBeThisCopy(ctx, "start");
         const running = findLauncher(ctx.home);
-        if (running) return { data: { url: running.url, pid: running.pid, already: true }, text: running.ready === false ? `Open Sourcebook is already starting (process ${running.pid}); "opensourcebook status" says when it answers.` : `Open Sourcebook is already running at ${running.url}.` };
+        if (running) {
+          if (running.ready === false) return { data: { url: running.url, pid: running.pid, already: true }, text: `Open Sourcebook is already starting (process ${running.pid}); "opensourcebook status" says when it answers.` };
+          // Started again while it runs (its shortcut clicked again, or a tab left from an earlier run): a fresh page in the browser, as "opensourcebook open" does.
+          const show = !ctx.json && !flagOn(ctx, "no-open") && !flagOn(ctx, "background");
+          const opened = show ? await browserAddress(ctx, "/").then((entry) => openUrl(ctx, entry), () => false) : false;
+          return { data: { url: running.url, pid: running.pid, already: true, ...(opened ? { opened } : {}) }, text: `Open Sourcebook is already running at ${running.url}.${opened ? " It is opened in the browser again." : ""}` };
+        }
         const portsFrom = portsFlag(ctx);
         const launcherArgs = [...(flagOn(ctx, "no-open") || flagOn(ctx, "background") ? ["--no-open"] : []), ...(portsFrom ? ["--ports-from", String(portsFrom)] : []), ...(flagOn(ctx, "phone") ? ["--phone"] : []), ...(flagOn(ctx, "no-phone") ? ["--no-phone"] : []), ...(flagOn(ctx, "dev") ? ["--dev"] : [])];
         if (flagOn(ctx, "phone") && flagOn(ctx, "no-phone")) throw new Problem("bad_arguments", "Say --phone or --no-phone, not both.");

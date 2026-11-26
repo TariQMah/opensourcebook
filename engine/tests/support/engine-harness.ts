@@ -39,12 +39,15 @@ export const PROVIDER_CALL_USD = 0.0025;
 export class FakeExtractor implements Extractor {
   readonly calls: ExtractionRequest[] = [];
   hold?: Promise<void>;
+  /** Holds only the reading of these links, so one slow source can sit beside quick ones. */
+  readonly holdFor: Partial<Record<string, Promise<void>>> = {};
 
   constructor(private readonly byURL: Record<string, Partial<SourceEnvelope>> = {}) {}
 
   async extract(request: ExtractionRequest): Promise<SourceEnvelope> {
     this.calls.push(request);
     if (this.hold) await this.hold;
+    if (request.sourceURL && this.holdFor[request.sourceURL]) await this.holdFor[request.sourceURL];
     const fixed = request.sourceURL ? this.byURL[request.sourceURL] : undefined;
     const text = request.uploadBytes ? new TextDecoder().decode(request.uploadBytes.bytes) : `Text of ${request.sourceURL ?? "nothing"}`;
     return {

@@ -98,3 +98,29 @@ test("phone: the home address is a private address of a real network card", () =
   assert.equal(homeAddress({ en0: [nic("8.8.8.8")] }), undefined);
   assert.equal(homeAddress({}), undefined);
 });
+
+test("browser reopen: a tab from an earlier run gets a fresh page opened in this computer's browser, a path of the app only, and not twice in a row", async () => {
+  const home = mkdtempSync(join(tmpdir(), "opensourcebook-phone-"));
+  const opened: string[] = [];
+  const phone = new Phone({ home, webPort: 1, doorPort: 0, controlPort: 0, token: "phone-token-0123456789", say: () => undefined, ansi: false, listenHost: "127.0.0.1", reopen: (to) => (opened.push(to), true) });
+  try {
+    await phone.start(false);
+    const port = phone.controlPort;
+    const send = (body: string) =>
+      new Promise<number>((resolve, reject) => {
+        const req = request({ host: "127.0.0.1", port, method: "POST", path: "/browser/reopen", headers: { host: `127.0.0.1:${port}`, "x-phone-token": "phone-token-0123456789", "content-type": "application/json" } }, (res) => {
+          res.resume();
+          res.on("end", () => resolve(res.statusCode!));
+        });
+        req.on("error", reject);
+        req.end(body);
+      });
+    assert.equal(await send(JSON.stringify({ to: "//evil.example" })), 200);
+    assert.deepEqual(opened, ["/"]);
+    assert.equal(await send(JSON.stringify({ to: "/projects/p1" })), 429, "not twice in a row");
+    assert.equal((await call(port, "POST", "/browser/reopen", { host: `127.0.0.1:${port}` })).status, 401, "only with the token");
+  } finally {
+    await phone.stop();
+    rmSync(home, { recursive: true, force: true });
+  }
+});

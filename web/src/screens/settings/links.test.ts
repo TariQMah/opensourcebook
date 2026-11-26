@@ -5,7 +5,7 @@ const settings = files["../Settings.tsx"] ?? "";
 const sections = new Set([...settings.matchAll(/\{ id: "([a-z-]+)", label:/g)].map((m) => m[1]));
 
 test("Settings lists its sections", () => {
-  expect([...sections]).toEqual(["makers", "providers", "voice", "library", "backups", "phone", "reminders", "appearance", "advanced"]);
+  expect([...sections]).toEqual(["makers", "providers", "voice", "videos", "library", "backups", "phone", "reminders", "appearance", "advanced"]);
 });
 
 test("every /settings#… link in the app names one of them", () => {

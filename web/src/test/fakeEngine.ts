@@ -266,6 +266,8 @@ export const redesignRoutes: Record<string, Handler> = {
     const sent = req.body as { done?: boolean; voice?: { skipped: boolean } };
     return { ...sampleSetup, ...(sent.done !== undefined ? { done: sent.done } : {}), ...(sent.voice ? { voice: { ...sampleSetup.voice, skipped: sent.voice.skipped } } : {}) };
   },
+  "GET /v1/drawing": { faster: false },
+  "PUT /v1/drawing": (req: FakeRequest) => ({ faster: (req.body as { faster: boolean }).faster }),
   "GET /v1/uploads/types": sampleUploadTypes,
   "POST /v1/chats/:id/messages/:messageId/pieces/:piece/close": (req: FakeRequest) => ({ message: { id: req.params.messageId, chatId: req.params.id, pieces: [{ ...sampleMakePiece, state: "closed" }] } }),
 };

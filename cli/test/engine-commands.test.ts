@@ -590,3 +590,23 @@ test("quiz show and item get say a quiz's time limit, which the app keeps", asyn
   assert.match(quizText(timed, new Map()), /^A quiz of 2 questions with 30 minutes to answer\.$/m);
   assert.match(quizText(quizPayload, new Map()), /^A quiz of 2 questions\.$/m);
 });
+
+test("an engine that took a call and is still reading says busy, and one that is not there says unreachable", async () => {
+  const { createServer } = await import("node:http");
+  const { engineAt } = await import("../commands/connect.ts");
+  const held: import("node:http").ServerResponse[] = [];
+  const slow = createServer((_req, res) => void held.push(res));
+  await new Promise<void>((done) => slow.listen(0, "127.0.0.1", done));
+  const port = (slow.address() as { port: number }).port;
+  try {
+    await assert.rejects(engineAt(`http://127.0.0.1:${port}`, "", TOKEN, 200).call("POST", "/v1/sources/s1/retry"), (e: { code?: string; message?: string }) => {
+      assert.equal(e.code, "engine_busy");
+      assert.match(e.message ?? "", /busy reading, please wait/);
+      return true;
+    });
+  } finally {
+    for (const res of held) res.destroy();
+    await new Promise<void>((done) => slow.close(() => done()));
+  }
+  await assert.rejects(engineAt(`http://127.0.0.1:${port}`, "", TOKEN, 200).call("GET", "/v1/projects"), (e: { code?: string }) => e.code === "engine_unreachable");
+});

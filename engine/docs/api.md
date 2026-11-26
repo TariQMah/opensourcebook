@@ -1738,6 +1738,21 @@ interface SetupState {
   service to ask. Step 3 ("Try it") uses the example import.
 - With no connector set up, `providers` is `{ connected: 0, ready: 0 }`.
 
+### Drawing a video (Nov 26, 2026)
+
+| Route | Request | Response | Errors |
+|---|---|---|---|
+| `GET /v1/drawing` | | `200 { faster: boolean }` | |
+| `PUT /v1/drawing` | `{ faster: boolean }` | `200 { faster: boolean }` | `400 invalid_request` |
+
+- Settings' "Use more of my computer to make videos faster", off by default.
+  Off, the scenes service draws a video with about half the computer at low
+  priority, so the person's own apps come first; on, with most of it at
+  normal priority. Kept per owner (`owner_settings`, key
+  `video.draw-faster`); `false` clears it.
+- Each video the scenes maker starts carries it as `faster: true` in its
+  request; a video already started keeps what it was started with.
+
 ### Open Sourcebook's tools
 
 Defined once in `chat/agent/default-tools.ts`, each with its name, what it

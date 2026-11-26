@@ -135,7 +135,7 @@ export function withStatus(view: SourceView): SourceView {
 function describe(raw: SourceView): string {
   const view = withStatus(raw);
   const s = view.source;
-  const state = s.status === "ready" ? "read" : s.status === "failed" ? `could not be read: ${s.errorMessage ?? view.extraction.errorMessage ?? "no reason given"}` : s.status;
+  const state = s.status === "ready" ? "read" : s.status === "failed" ? `could not be read: ${s.errorMessage ?? view.extraction.errorMessage ?? "no reason given"}` : s.status === "extracting" ? "busy reading, please wait" : s.status;
   return `${s.title}  (${s.id}, ${s.kind}, ${state})`;
 }
 

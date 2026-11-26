@@ -1,8 +1,10 @@
 /**
  * ffmpeg as a child process the service does not wait on: the service keeps answering while a long sound is mastered
- * or a narration is decoded. Stopping the job (its signal) ends ffmpeg too.
+ * or a narration is decoded. Stopping the job (its signal) ends ffmpeg too. It runs at low priority, so the person's
+ * own apps come first (pipeline/lib/priority.ts).
  */
 import { spawn } from "node:child_process";
+import { lower } from "../pipeline/lib/priority.ts";
 
 export interface Ran {
   stdout: Buffer;
@@ -14,6 +16,7 @@ export function ffmpeg(args: string[], o: { input?: Uint8Array; signal?: AbortSi
   return new Promise((resolve, reject) => {
     if (o.signal?.aborted) return reject(new Error("stopped"));
     const child = spawn("ffmpeg", args, { stdio: [o.input ? "pipe" : "ignore", "pipe", "pipe"] });
+    lower(child.pid);
     const out: Buffer[] = [];
     const err: Buffer[] = [];
     const stop = () => child.kill("SIGKILL");

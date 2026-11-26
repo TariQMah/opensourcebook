@@ -115,8 +115,6 @@ export interface ToolContext {
   signal?: AbortSignal;
   /** What the agent can reach beyond the scene language; none means only the video tools. */
   toolbox?: PictureToolbox;
-  /** Runs a render when it is this job's turn (one at a time on this computer); straight away when not given. */
-  queue?: <T>(work: () => Promise<T>) => Promise<T>;
 }
 
 export interface ToolAnswer {
@@ -656,8 +654,8 @@ const render: Tool = {
     ctx.save();
     ctx.step("Making a first cut for your agent to watch");
     const entry: { started: number; progress: number; done: Promise<void>; result?: CutResult; error?: string; voiceDown?: boolean } ={ started: Date.now(), progress: 0, done: Promise.resolve() };
-    const queue = ctx.queue ?? (<T>(work: () => Promise<T>) => work());
-    entry.done = queue(() => makeCut(ctx, (p) => (entry.progress = p))).then(
+    // One video draws at a time on this computer: a render that comes while another draws waits for its turn.
+    entry.done = makeCut(ctx, (p) => (entry.progress = p)).then(
       (result) => void (entry.result = result),
       (e: Error) => {
         const down = voiceDownOf(e);

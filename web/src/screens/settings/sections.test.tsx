@@ -84,3 +84,21 @@ test("Advanced says when the video maker on this computer is not running", async
   });
   expect(await screen.findByText(/needs the scene maker running on this computer/)).toBeInTheDocument();
 });
+
+test("Videos is a switch to use more of the computer, off by default, kept by the engine", async () => {
+  const app = renderApp("/settings#videos", redesignRoutes);
+  const section = await screen.findByRole("region", { name: "Videos" });
+  const faster = within(section).getByRole("switch", { name: "Use more of my computer to make videos faster" });
+  expect(faster).toHaveAttribute("aria-checked", "false");
+  expect(section).toHaveTextContent("Videos draw with about half of this computer, after your own apps");
+  await userEvent.click(faster);
+  expect(await within(section).findByRole("switch", { name: "Use more of my computer to make videos faster" })).toHaveAttribute("aria-checked", "true");
+  expect(section).toHaveTextContent("Videos draw with most of this computer");
+  expect(app.calls.find((c) => c.method === "PUT" && c.path === "/v1/drawing")?.body).toEqual({ faster: true });
+});
+
+test("Videos shows the switch on when the engine says it is", async () => {
+  renderApp("/settings#videos", { ...redesignRoutes, "GET /v1/drawing": { faster: true } });
+  const section = await screen.findByRole("region", { name: "Videos" });
+  await vi.waitFor(() => expect(within(section).getByRole("switch", { name: "Use more of my computer to make videos faster" })).toHaveAttribute("aria-checked", "true"));
+});

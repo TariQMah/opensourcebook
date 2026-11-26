@@ -267,7 +267,6 @@ export class Jobs {
   private readonly pinned = new Map<string, Voice>();
   /** Per job: when the agent last called one of Open Sourcebook's tools, and how many of its calls are running now. */
   private readonly activity = new Map<string, { at: number; open: number }>();
-  private renderQueue: Promise<unknown> = Promise.resolve();
   private readonly o: JobsOptions;
   private readonly log: (line: string) => void;
 
@@ -877,7 +876,7 @@ export class Jobs {
       const t0 = Date.now();
       let made;
       try {
-        made = await this.queued(() => makeCut(ctx));
+        made = await makeCut(ctx);
       } catch (e) {
         // The voice going away waits for the voice, as a render after the turn would; anything else, the render after the turn tries again.
         if (voiceDownOf(e) || abort.signal.aborted) throw e;
@@ -1059,8 +1058,9 @@ export class Jobs {
     this.stepTo(job, "Rendering the video");
     this.save(job);
     t0 = Date.now();
-    // One render at a time: each uses several Chrome tabs and most of the processor.
-    const out = await this.queued(() => renderVideo(ctx, placed, spoken, (p) => this.setProgress(job, 0.8 + 0.2 * p, false)));
+    // One video draws at a time (pipeline/stages/render.ts): this one's voice and scenes go on while another draws,
+    // and only its drawing waits, saying so in its step.
+    const out = await renderVideo(ctx, placed, spoken, (p) => this.setProgress(job, 0.8 + 0.2 * p, false));
     job.timings.renderMs += Date.now() - t0;
     if (abort.signal.aborted) return;
     const script = ctx.draft.script!;
@@ -1115,13 +1115,6 @@ export class Jobs {
     }
   }
 
-  /** One render at a time on this computer: each uses several Chrome tabs and most of the processor. */
-  private queued<T>(work: () => Promise<T>): Promise<T> {
-    const next = this.renderQueue.catch(() => undefined).then(work);
-    this.renderQueue = next;
-    return next;
-  }
-
   // -------------------------------------------------------------------------------------------------------------------
 
   private context(job: JobRecord, signal?: AbortSignal): ToolContext {
@@ -1132,7 +1125,6 @@ export class Jobs {
       folder: this.folder(job.id),
       styles: this.o.styles(),
       voice: this.voiceOf(job),
-      queue: (work) => this.queued(work),
       step: (label) => this.stepTo(job, label),
       save: () => this.saveDraft(job.id, draft),
       ...(signal ? { signal } : {}),

@@ -55,8 +55,13 @@ export function connect(ctx: Pick<Ctx, "home">): Engine {
   return engineAt(`http://127.0.0.1:${port}`, running.url, secrets.OPENSOURCEBOOK_CLIENT_TOKEN);
 }
 
-export function engineAt(base: string, web: string, token: string): Engine {
+/** How long a call waits for the engine's answer. Adding or retrying a large source is read while the call waits. */
+export const CALL_WAIT_MS = 120_000;
+
+export function engineAt(base: string, web: string, token: string, waitMs = CALL_WAIT_MS): Engine {
   const unreachable = () => new Problem("engine_unreachable", `Open Sourcebook's engine did not answer at ${base}. Run "opensourcebook status" to see what is up; if Open Sourcebook stopped, ${START_HINT.charAt(0).toLowerCase()}${START_HINT.slice(1)}`);
+  // The engine took the call and is still at it, most often reading a large source: busy, not unreachable.
+  const busy = () => new Problem("engine_busy", `Open Sourcebook's engine is busy reading, please wait. It took this and is still working on it (a large source can take a few minutes to read); check in a minute with "opensourcebook source list".`);
   const go = async (method: string, path: string, options: CallOptions = {}): Promise<Response> => {
     const url = new URL(path, base);
     for (const [k, v] of Object.entries(options.query ?? {})) if (v !== undefined) url.searchParams.set(k, String(v));
@@ -67,9 +72,9 @@ export function engineAt(base: string, web: string, token: string): Engine {
       body = JSON.stringify(options.json);
     } else if (options.body) body = options.body as unknown as BodyInit;
     try {
-      return await fetch(url, { method, headers, ...(body !== undefined ? { body } : {}), signal: AbortSignal.timeout(120_000) });
-    } catch {
-      throw unreachable();
+      return await fetch(url, { method, headers, ...(body !== undefined ? { body } : {}), signal: AbortSignal.timeout(waitMs) });
+    } catch (error) {
+      throw (error as { name?: string } | undefined)?.name === "TimeoutError" ? busy() : unreachable();
     }
   };
   return {

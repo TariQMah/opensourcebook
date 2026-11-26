@@ -184,6 +184,30 @@ describe("/v1/sources", () => {
     expect((await bodyOf(read)).source.id).toBe(body.source.id);
   });
 
+  it("reads a quick source in another project while a slow one is still being read, and says the slow one is busy", async () => {
+    const extractor = new FakeExtractor();
+    const engine = createTestEngine({ extractor });
+    const owner = await ownerIdForToken(CLIENT_TOKEN);
+    const handbook = await engine.deps.repos.projects.create({ ownerId: owner, title: "Handbook" });
+    const other = await engine.deps.repos.projects.create({ ownerId: owner, title: "Other" });
+    const slowRead = gate();
+    extractor.holdFor["https://example.com/handbook/huge-page"] = slowRead.promise;
+
+    const slow = handleRequest(authed("/v1/sources", { method: "POST", body: { url: "https://example.com/handbook/huge-page", projectId: handbook.id } }), engine.deps);
+    const quick = await handleRequest(authed("/v1/sources", { method: "POST", body: { url: "https://example.com/short", projectId: other.id } }), engine.deps);
+    expect(quick.status).toBe(201);
+    expect((await bodyOf(quick)).extraction).toMatchObject({ status: "ready" });
+
+    const [waiting] = await engine.deps.repos.sources.listByProject(handbook.id);
+    expect((await engine.deps.repos.sources.getExtraction(waiting!.contentHash))?.status).toBe("extracting");
+    const retried = await handleRequest(authed(`/v1/sources/${waiting!.id}/retry`, { method: "POST" }), engine.deps);
+    expect(retried.status).toBe(409);
+    expect(await bodyOf(retried)).toMatchObject({ error: "source_busy", message: expect.stringMatching(/^Busy reading this source, please wait\./) });
+
+    slowRead.open();
+    expect((await bodyOf(await slow)).extraction).toMatchObject({ status: "ready" });
+  });
+
   it("files a source into a project the caller owns, and refuses anyone else's", async () => {
     const engine = createTestEngine();
     const owner = await ownerIdForToken(CLIENT_TOKEN);

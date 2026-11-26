@@ -16,6 +16,7 @@ import { PhoneSection } from "./settings/PhoneSection";
 import { ProvidersSection } from "./settings/ProvidersSection";
 import { RemindersSection } from "./settings/RemindersSection";
 import { useNarrow } from "./settings/useNarrow";
+import { VideosSettings } from "./settings/VideosSettings";
 import { VoiceSettings } from "./settings/VoiceSettings";
 import "./settings.css";
 
@@ -24,6 +25,7 @@ const SECTIONS = [
   { id: "makers", label: "What makes what", view: () => <MakersSettings /> },
   { id: "providers", label: "Providers", view: () => <ProvidersSection /> },
   { id: "voice", label: "Voice", view: () => <VoiceSettings /> },
+  { id: "videos", label: "Videos", view: () => <VideosSettings /> },
   { id: "library", label: "Library", view: () => <LibrarySection /> },
   { id: "backups", label: "Backups", view: () => <BackupsSection /> },
   { id: "phone", label: "Phone", view: () => <PhoneSection /> },

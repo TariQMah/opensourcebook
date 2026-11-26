@@ -40,14 +40,16 @@ export const RESTARTS: RestartPolicy = { max: 4, windowMs: 10 * 60_000, backoffM
 const pad = (s: string, n: number) => s + " ".repeat(Math.max(1, n - s.length));
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-function openInBrowser(target: string): void {
+function openInBrowser(target: string): boolean {
   const [command, args] = process.platform === "darwin" ? ["open", [target]] : process.platform === "win32" ? ["cmd", ["/c", "start", "", target]] : ["xdg-open", [target]];
   try {
     const child = spawn(command as string, args as string[], { stdio: "ignore", detached: true, windowsHide: true });
     child.on("error", () => undefined);
     child.unref();
+    return true;
   } catch {
     // No browser to open; the address is printed anyway.
+    return false;
   }
 }
 
@@ -236,7 +238,7 @@ export async function run(w: Wiring, options: RunOptions, programs: Program[] = 
   if (options.phone !== undefined) rememberPhone(w.home, options.phone);
   const ansi = Boolean(process.stdout.isTTY) && !process.env.CI;
   if (w.ports.phone && w.ports["phone-control"] && w.ports.web) {
-    phone = new Phone({ home: w.home, webPort: w.ports.web, doorPort: w.ports.phone, controlPort: w.ports["phone-control"], token: w.secrets.PHONE_TOKEN, say, ansi, openCodes, voices: new VoiceInstalls({ root: w.root, home: w.home }), setup, ...(w.keys ? { keys: w.keys } : {}) });
+    phone = new Phone({ home: w.home, webPort: w.ports.web, doorPort: w.ports.phone, controlPort: w.ports["phone-control"], token: w.secrets.PHONE_TOKEN, say, ansi, openCodes, voices: new VoiceInstalls({ root: w.root, home: w.home }), setup, reopen: (to) => openInBrowser(openAddress(frontUrl, openCodes.issue().code, to)), ...(w.keys ? { keys: w.keys } : {}) });
     try {
       await phone.start(options.phone ?? phoneChoice(w.home));
     } catch (error) {

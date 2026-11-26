@@ -30,6 +30,7 @@
  *   GET|POST /v1/plans/:id/items/:itemId/thread   GET /v1/threads   (the thread on a made thing, in its chat)
  *   GET /v1/providers   PATCH /v1/providers/:id   (the person's agents that can answer the chat)
  *   GET|PUT /v1/setup   (first-time setup: how far the person is, and whether it is done)
+ *   GET|PUT /v1/drawing (whether videos are drawn with more of this computer, faster)
  *   GET|PUT /v1/voice   PUT|DELETE /v1/voice/services/:service/key   GET /v1/voice/services/:service/voices[/:voiceId/sample]
  *   POST /v1/agent-turns/:id/(tools|draft|finish)  (the connector of the person's own agent; turn token)
  *   POST /v1/work-turns/:id/(tools|draft|finish)   (the same, for flashcards or a quiz the agent makes; turn token)
@@ -111,6 +112,7 @@ import { listProviders, putProviderPick, putProviderPicks, updateProvider } from
 import { listMakeTimes } from "./routes/make-times";
 import { getActivity } from "./routes/activity";
 import { getSetup, putSetup } from "./routes/setup";
+import { getDrawing, putDrawing } from "./routes/drawing";
 import { listVideoMakers, styleSample } from "./routes/video-makers";
 import { deleteVoiceKey, getVoice, listVoiceOptions, putVoice, putVoiceKey, voiceSample } from "./routes/voice";
 import { consumerOptions, depsForEnv, keepJobsInBackground, refreshMakerStatus, refreshMakerStatusSoon, type EngineDeps } from "./wiring";
@@ -280,6 +282,8 @@ async function route(request: Request, deps: EngineDeps | undefined, ctx: Worker
   if (method === "PATCH" && provider) return updateProvider(request, decodeURIComponent(provider[1]), deps);
   if (method === "GET" && path === "/v1/setup") return getSetup(request, deps);
   if (method === "PUT" && path === "/v1/setup") return putSetup(request, deps);
+  if (method === "GET" && path === "/v1/drawing") return getDrawing(request, deps);
+  if (method === "PUT" && path === "/v1/drawing") return putDrawing(request, deps);
   if (path === "/v1/voice" && method === "GET") return getVoice(request, deps);
   if (path === "/v1/voice" && method === "PUT") return putVoice(request, deps);
   const voiceKey = /^\/v1\/voice\/services\/([^/]+)\/key$/.exec(path);

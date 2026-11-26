@@ -62,6 +62,7 @@ import type {
   VoiceServiceView,
   VoiceOption,
   SetupState,
+  DrawingSettings,
   UploadType,
   ProjectGroup,
   RestoreChoice,
@@ -487,6 +488,13 @@ export class ApiClient {
   /** "Skip for now" on the voice step: the engine keeps it, and a skipped step is not asked again. */
   skipVoice(): Promise<SetupState> {
     return this.request("PUT", "/v1/setup", { json: { voice: { skipped: true } } });
+  }
+  // Drawing a video
+  drawing(): Promise<DrawingSettings> {
+    return this.request("GET", "/v1/drawing");
+  }
+  setDrawing(faster: boolean): Promise<DrawingSettings> {
+    return this.request("PUT", "/v1/drawing", { json: { faster } });
   }
   /** Who can make videos on this engine, and whether each can now. */
   async videoMakers(): Promise<VideoMaker[]> {

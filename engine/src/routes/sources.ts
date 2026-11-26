@@ -30,6 +30,8 @@ import type { EngineDeps } from "../wiring";
 import { FieldError, clearableText, readFields } from "./fields";
 
 const MAX_TITLE = 200;
+/** What a retry of a source still being read is told: it is busy, not broken, and needs nothing but time. */
+export const SOURCE_BUSY = "Busy reading this source, please wait. It is ready when the reading finishes; nothing needs doing.";
 
 export async function createSource(request: Request, deps: EngineDeps): Promise<Response> {
   const auth = await authenticate(request, deps.clientToken);
@@ -169,7 +171,7 @@ export async function retrySource(request: Request, id: string, deps: EngineDeps
   try {
     await deps.sources.ensureExtracted(owned.source, { provider: deps.provider(deps.repos.usage.sink({ ownerId: owned.ownerId })) });
   } catch (error) {
-    if (error instanceof ExtractionBusyError) return errorResponse("source_busy", "This source is being read right now; try again shortly", 409);
+    if (error instanceof ExtractionBusyError) return errorResponse("source_busy", SOURCE_BUSY, 409);
     if (error instanceof SourceInputError) return errorResponse(error.code, error.message, error.status);
     // Failed again: its extraction says why.
     console.warn(`Source ${id}: extraction failed again: ${message(error)}`);

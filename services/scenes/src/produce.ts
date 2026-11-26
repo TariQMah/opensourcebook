@@ -6,7 +6,7 @@
 import { existsSync, statSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { mix, placements } from "./sound.ts";
-import { render } from "../pipeline/stages/render.ts";
+import { render, WAIT_WORDS } from "../pipeline/stages/render.ts";
 import { buildScene } from "./scene.ts";
 import { sceneContext, styleOf, type ToolContext } from "./tools.ts";
 import { speakBeats, spokenAs } from "./beats.ts";
@@ -97,14 +97,23 @@ export async function renderVideo(ctx: ToolContext, placed: Placed[], spoken: Sp
   // What this computer has drawn before says how long this will take (src/speed.ts); a style it has not drawn says nothing.
   const style = styleOf(ctx);
   const book = speedBook();
+  let waited = false;
   const out = await render(laid.timeline, ctx.folder, {
     output: join(ctx.folder, "video.mp4"),
     imageCredits,
     ...(ctx.signal ? { signal: ctx.signal } : {}),
+    // The person asked to use more of the computer (Settings › Videos): more frames at once, at normal priority.
+    ...(ctx.request.faster ? { faster: true } : {}),
     onProgress,
+    // Another video is drawing: this one waits its turn, and says so until it draws.
+    onWait: () => {
+      waited = true;
+      ctx.step(WAIT_WORDS);
+    },
     onStart: ({ frames, concurrency }) => {
       const seconds = book?.seconds(style, frames, concurrency);
       if (seconds !== undefined) ctx.step(`Drawing the video, ${howLong(seconds)} on this computer`);
+      else if (waited) ctx.step("Drawing the video");
     },
     onNote: (words) => ctx.step(words),
     onDrawn: (drawn) => {

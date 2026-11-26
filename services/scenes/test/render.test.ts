@@ -4,11 +4,13 @@
  */
 import assert from "node:assert/strict";
 import { existsSync, mkdtempSync, rmSync, statSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { getPriority, tmpdir } from "node:os";
+import { spawn } from "node:child_process";
+import { LOW } from "../pipeline/lib/priority.ts";
 import { join } from "node:path";
 import { after, before, test } from "node:test";
 import type { renderMedia } from "@remotion/renderer";
-import { render, roomWords, type Drawn } from "../pipeline/stages/render.ts";
+import { render, roomWords, WAIT_WORDS, type Drawn } from "../pipeline/stages/render.ts";
 import type { Machine } from "../pipeline/lib/frames-at-once.ts";
 import { useChrome } from "../src/chrome.ts";
 import { buildScene } from "../src/scene.ts";
@@ -150,4 +152,67 @@ test("a render that fails for another reason, or is stopped, is not tried again"
   }) as unknown as typeof renderMedia;
   await assert.rejects(render(timeline(), dir, { machine: BIG, renderer: stopped, signal: stop.signal }), /Target closed/);
   assert.equal(calls, 1, "a stop is not a lack of room");
+});
+
+test("two videos started together never draw at once: the second waits its turn and says so", async () => {
+  process.env.RENDER_CONCURRENCY = "1";
+  const { mkdirSync } = await import("node:fs");
+  const [a, b] = [join(folder, "first"), join(folder, "second")];
+  mkdirSync(a, { recursive: true });
+  mkdirSync(b, { recursive: true });
+  let open = 0;
+  let most = 0;
+  const order: string[] = [];
+  let finish: () => void = () => undefined;
+  const drawer = (name: string, hold?: Promise<void>) =>
+    (async () => {
+      open++;
+      most = Math.max(most, open);
+      order.push(`${name} draws`);
+      await hold;
+      order.push(`${name} done`);
+      open--;
+      return {} as never;
+    }) as unknown as typeof renderMedia;
+  const held = new Promise<void>((r) => (finish = r));
+  const waits: string[] = [];
+  const first = render(timeline(), a, { machine: TWO, renderer: drawer("first", held), onWait: () => waits.push("first") });
+  const second = render(timeline(), b, { machine: TWO, renderer: drawer("second"), onWait: () => waits.push("second"), onStart: () => order.push("second starts") });
+  assert.deepEqual(waits, ["second"], "only the one that came while another draws waits, and it is told at once");
+  await new Promise((r) => setTimeout(r, 2_000));
+  assert.ok(!order.includes("second draws"), `the second waits while the first draws: ${order.join(", ")}`);
+  finish();
+  await Promise.all([first, second]);
+  assert.equal(most, 1, "never two at once");
+  assert.deepEqual(order, ["first draws", "first done", "second starts", "second draws", "second done"]);
+  assert.match(WAIT_WORDS, /^Waiting for the video before it to finish drawing$/);
+  // A third, alone, does not wait.
+  const alone: string[] = [];
+  await render(timeline(), a, { machine: TWO, renderer: drawer("third"), onWait: () => alone.push("third") });
+  assert.deepEqual(alone, []);
+});
+
+test("drawing is gentle by default, and with more frames at once at normal priority for a person who asked for speed", { skip: process.platform === "win32" }, async () => {
+  delete process.env.RENDER_CONCURRENCY;
+  const { mkdirSync } = await import("node:fs");
+  const dir = join(folder, "faster");
+  mkdirSync(dir, { recursive: true });
+  const TEN: Machine = { cores: 10, memory: 32 * 1024 ** 3 };
+  // The renderer starts a process of its own, as Chrome does, and says what priority it ends up at.
+  const seen: { concurrency: number; lowered: boolean; changed: boolean }[] = [];
+  const renderer = (async (o: { concurrency?: number | null }) => {
+    const child = spawn("sleep", ["5"], { stdio: "ignore" });
+    const before = getPriority(child.pid!);
+    await new Promise((r) => setTimeout(r, 1_500));
+    const after = getPriority(child.pid!);
+    seen.push({ concurrency: o.concurrency!, lowered: after === LOW, changed: after !== before });
+    child.kill();
+    return {} as never;
+  }) as unknown as typeof renderMedia;
+  await render(timeline(), dir, { machine: TEN, renderer });
+  await render(timeline(), dir, { machine: TEN, renderer, faster: true });
+  assert.equal(seen[0]!.concurrency, 5);
+  assert.ok(seen[0]!.lowered, `gently, the renderer's processes are lowered: ${JSON.stringify(seen)}`);
+  assert.equal(seen[1]!.concurrency, 6, "faster: more frames at once");
+  assert.equal(seen[1]!.changed, false, "faster: nothing lowered");
 });

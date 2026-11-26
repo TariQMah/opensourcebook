@@ -205,6 +205,8 @@ export interface NewScenesVideo {
   reviewAgent?: string;
   reviewModel?: string;
   reviewEffort?: string;
+  /** Draw with most of the computer at normal priority (the person asked for speed); left out, gently. */
+  faster?: boolean;
 }
 
 /** A voice service as the app shows it (the scenes service's `voices.ts`). Never a key: whether one is set, and its last four characters. */

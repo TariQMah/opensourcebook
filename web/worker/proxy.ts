@@ -90,7 +90,7 @@ function error(status: number, code: string, message: string): Response {
  * How a person opens the app, in the words every message here ends with: first what to do without a terminal, then
  * the command. `opensourcebook` is the command the one-line install gives; `npm run open` is the same in a copy of the code.
  */
-const HOW_TO_OPEN = 'Start Open Sourcebook again and it opens the right page for you. If you use a terminal, the command is "opensourcebook open", or "npm run open" in its folder.';
+const HOW_TO_OPEN = 'Open Open Sourcebook with its shortcut (on Windows, find it in the Start menu); if it is already running, that opens a fresh page for you. If you use a terminal, the command is "opensourcebook open", or "npm run open" in its folder.';
 const HOW_TO_START = 'Start Open Sourcebook and it opens the right page for you. If you use a terminal, the command is "opensourcebook", or "npm start" in its folder.';
 
 /** What a browser Open Sourcebook has not let in is told (the app draws its own page for it, src/app/OpenGate.tsx). */
@@ -148,8 +148,13 @@ export async function proxy(
     return error(503, "not_set_up", `Open Sourcebook is not running yet. ${HOW_TO_START} (A web app run alone, or deployed behind a login gate, sets OPENSOURCEBOOK_BROWSER_GATE=off.)`);
   }
   if (url.pathname === "/api/open") return open(request, url, env, fetchImpl);
+  if (url.pathname === "/api/reopen") return reopen(request, url, env, fetchImpl);
   const who = callerOf(request, url, env);
-  if (!who) return error(401, "not_opened", NOT_OPENED);
+  if (!who) {
+    // A tab let in by an earlier run (its cookie is from before this start): Open Sourcebook is running, this tab only needs letting in again.
+    if (earlierTab(request, url)) return Response.json({ error: "not_opened", message: NOT_OPENED, earlier: true, canReopen: Boolean(env.PHONE_URL && env.PHONE_TOKEN) }, { status: 401, headers: { "cache-control": "no-store" } });
+    return error(401, "not_opened", NOT_OPENED);
+  }
   if (url.pathname === "/api/session") return Response.json({ in: true, as: who }, { headers: { "cache-control": "no-store" } });
   if (url.pathname === "/api/phone" || url.pathname.startsWith("/api/phone/") || url.pathname.toLowerCase().startsWith("/api/phone")) {
     if (who !== "browser") return error(403, "this_computer_only", "Paired devices are managed in this computer's browser.");
@@ -279,12 +284,51 @@ async function open(request: Request, url: URL, env: ProxyEnv, fetchImpl: typeof
   });
 }
 
+/** True when this browser holds a browser cookie of this address that this run did not make: a tab from an earlier run. Never for what the door passes on. */
+function earlierTab(request: Request, url: URL): boolean {
+  if (request.headers.get(DOOR_HEADER) !== null) return false;
+  return Boolean(cookie(request, browserCookie(url)));
+}
+
+/**
+ * `POST /api/reopen`: a tab from an earlier run asks the launcher to open a fresh opening address in this computer's
+ * browser. The tab itself gets nothing: the address goes to the browser by the launcher, as at a start, so the most a
+ * caller can do is make a new page of Open Sourcebook appear on this computer. Only for a tab with an earlier run's
+ * cookie, from this site, never through the door.
+ */
+async function reopen(request: Request, url: URL, env: ProxyEnv, fetchImpl: typeof fetch): Promise<Response> {
+  if (request.method !== "POST") return error(405, "method_not_allowed", "Method not allowed.");
+  if (request.headers.get(DOOR_HEADER) !== null) return error(403, "this_computer_only", "This is done in the browser on the computer Open Sourcebook runs on.");
+  if (crossSite(request, url)) return error(403, "cross_site", "Requests must come from this site.");
+  if (!earlierTab(request, url)) return error(403, "not_opened", NOT_OPENED);
+  if (!env.PHONE_URL || !env.PHONE_TOKEN) return error(503, "not_set_up", `Open Sourcebook was not started by its launcher, so it cannot open a fresh page. ${HOW_TO_OPEN}`);
+  let to = "/";
+  try {
+    const body = (await request.json()) as { to?: unknown };
+    if (typeof body.to === "string") to = landing(body.to);
+  } catch {
+    // No body: the home page.
+  }
+  try {
+    const answer = await fetchImpl(new URL("/browser/reopen", env.PHONE_URL).toString(), {
+      method: "POST",
+      headers: { "x-phone-token": env.PHONE_TOKEN, "content-type": "application/json" },
+      body: JSON.stringify({ to }),
+      redirect: "manual",
+    });
+    const said = (await answer.json().catch(() => ({}))) as Record<string, unknown>;
+    return Response.json(said, { status: answer.status, headers: { "cache-control": "no-store" } });
+  } catch {
+    return error(502, "launcher_unreachable", "The launcher did not answer.");
+  }
+}
+
 /** The plain page for an opening address that was used or ran out. */
 function openPage(): Response {
   const page = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="color-scheme" content="light dark"><title>Open Sourcebook</title></head>
 <body style="font: 17px/1.5 -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 34rem; margin: 15vh auto; padding: 0 20px">
 <h1 style="font-size: 24px">This address has already been used</h1>
-<p>Start Open Sourcebook again and it opens the right page for you.</p>
+<p>Open Open Sourcebook with its shortcut (on Windows, find it in the Start menu). If it is already running, that opens a fresh page for you.</p>
 <p>If you use a terminal, the command is <code>opensourcebook open</code>, or <code>npm run open</code> in its folder.</p>
 <p>Each address that opens Open Sourcebook works once, for ten minutes, so an old one in the browser's history opens nothing.</p>
 </body></html>`;

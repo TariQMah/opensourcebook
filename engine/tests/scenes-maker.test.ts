@@ -51,10 +51,10 @@ function memoryCheckpoint(): EngineCheckpoint & { values: Map<string, JsonValue>
   return { values, get: (key) => values.get(key), put: async (key, value) => void values.set(key, JSON.parse(JSON.stringify(value))) };
 }
 
-function setup(options: { service?: FakeScenesService; settings?: Partial<VideoSettings>; checkpoint?: ReturnType<typeof memoryCheckpoint>; signal?: AbortSignal; clock?: () => number } = {}) {
+function setup(options: { service?: FakeScenesService; settings?: Partial<VideoSettings>; checkpoint?: ReturnType<typeof memoryCheckpoint>; signal?: AbortSignal; clock?: () => number; drawFaster?: (ownerId?: string) => Promise<boolean> } = {}) {
   const service = options.service ?? new FakeScenesService();
   const client = new ScenesClient({ url: SERVICE, token: service.token }, service.fetch);
-  const maker = createScenesMaker({ client, pollMs: 0, sleep: async () => undefined, ...(options.clock ? { clock: options.clock } : {}) });
+  const maker = createScenesMaker({ client, pollMs: 0, sleep: async () => undefined, ...(options.clock ? { clock: options.clock } : {}), ...(options.drawFaster ? { drawFaster: options.drawFaster } : {}) });
   const makers = new VideoMakerRegistry().register(maker);
   const definition = videoDefinitionFor(makers);
   const usage = new InMemoryUsageSink();
@@ -133,6 +133,23 @@ describe("scenes maker: making a video", () => {
     expect(await files.show({ jobId: "other", settings: {}, kept: { "scenes:video": "job-1" } })).toBeUndefined();
     expect(t.service.shown).toEqual(["job-1", "job-1"]);
     expect(await files.show({ jobId: "nobody", settings: {}, kept: {} })).toMatch(/no longer on this computer/);
+  });
+
+  it("asks the service to draw faster only when the owner turned it on, and gently otherwise", async () => {
+    const owners: Array<string | undefined> = [];
+    const fast = setup({ settings: { style: "blueprint", minutes: 1 }, drawFaster: async (ownerId) => (owners.push(ownerId), true) });
+    fast.ctx.ownerId = "owner-1";
+    await runEngine(fast.definition, fast.ctx);
+    expect((fast.service.videos.get("job-1")!.body as { faster?: boolean }).faster).toBe(true);
+    expect(owners).toEqual(["owner-1"]);
+
+    const gentle = setup({ settings: { style: "blueprint", minutes: 1 }, drawFaster: async () => false });
+    await runEngine(gentle.definition, gentle.ctx);
+    expect(gentle.service.videos.get("job-1")!.body).not.toHaveProperty("faster");
+
+    const failing = setup({ settings: { style: "blueprint", minutes: 1 }, drawFaster: async () => Promise.reject(new Error("db gone")) });
+    await runEngine(failing.definition, failing.ctx);
+    expect(failing.service.videos.get("job-1")!.body).not.toHaveProperty("faster");
   });
 
   it("names an agent in every request to the service: the item's own, else the one the job settles", async () => {

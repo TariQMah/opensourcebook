@@ -104,7 +104,12 @@ export interface PhoneOptions {
   voices?: VoiceInstalls;
   /** What Get set up's buttons ask for: installing and signing in to an agent, fetching ffmpeg (cli/setup.ts). */
   setup?: SetupActions;
+  /** Opens a fresh opening address for `to` in this computer's browser, for a tab left from an earlier run (OpenGate). */
+  reopen?: (to: string) => boolean;
 }
+
+/** A tab from an earlier run may ask for a fresh page at most this often. */
+const REOPEN_EVERY_MS = 5_000;
 
 export interface PhoneStatus {
   on: boolean;
@@ -120,6 +125,7 @@ export class Phone {
   private control: Server | undefined;
   private current: { url: string; expiresAt: number } | undefined;
   private readonly o: PhoneOptions;
+  private reopenedAt = 0;
   /** The control server's port, once it listens. */
   controlPort = 0;
 
@@ -257,6 +263,19 @@ export class Phone {
       if (req.method === "POST" && path === "/browser/code" && opener) {
         const { code, expiresAt } = opener.issue();
         return reply(200, { code, expiresAt: new Date(expiresAt).toISOString() });
+      }
+      if (req.method === "POST" && path === "/browser/reopen" && this.o.reopen) {
+        const text = await readSmall(req, 2048);
+        let to = "/";
+        try {
+          const asked = (JSON.parse(text ?? "{}") as { to?: unknown }).to;
+          if (typeof asked === "string" && asked.startsWith("/") && !asked.startsWith("//") && !asked.includes("\\")) to = asked;
+        } catch {
+          // The home page.
+        }
+        if (Date.now() - this.reopenedAt < REOPEN_EVERY_MS) return reply(429, { error: "too_soon", message: "A fresh page was opened a moment ago; look for it among the browser's tabs." });
+        this.reopenedAt = Date.now();
+        return this.o.reopen(to) ? reply(200, { opened: true }) : reply(500, { error: "not_opened", message: "Open Sourcebook could not open the browser. Use its shortcut, or run \"opensourcebook open\"." });
       }
       if (req.method === "POST" && path === "/browser/redeem" && opener) {
         const text = await readSmall(req, 1024);
