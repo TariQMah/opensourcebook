@@ -1,10 +1,11 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { errorText, isApiError } from "../api/errors";
-import type { VoiceOption, VoiceServiceView, VoiceSetup as Setup } from "../api/types";
+import type { VoiceInstallState, VoiceOption, VoiceServiceView, VoiceSetup as Setup } from "../api/types";
 import { useApi } from "../app/context";
 import { useLoad } from "../app/useLoad";
 import { Icon } from "../design/Icon";
 import { Segmented } from "../design/ui";
+import { VoiceInstallProgress } from "./InstallProgress";
 import { serviceReady as ready } from "./ready";
 import { SAMPLE_FAILED, useSample } from "./useSample";
 import "./voice.css";
@@ -275,11 +276,11 @@ const INSTALL_POLL_MS = 3000;
 
 /**
  * A voice that runs on this computer: installed or not. If not, a button that has the launcher install it with the
- * Node Open Sourcebook came with (cli/voice.ts), and the command that does the same in a terminal, run once.
+ * Node Open Sourcebook came with (cli/voice.ts), and how that is going, step by step.
  */
 function LocalSetup({ service: s, checking, onCheck }: { service: VoiceServiceView; checking: boolean; onCheck: () => void }) {
   const client = useApi();
-  const [install, setInstall] = useState<{ state: "idle" | "installing" | "failed"; message?: string }>({ state: "idle" });
+  const [install, setInstall] = useState<{ state: "idle" | "installing" | "failed"; message?: string; now?: VoiceInstallState }>({ state: "idle" });
   const alive = useRef(true);
   useEffect(() => () => void (alive.current = false), []);
   if (s.installed) return <p className="vs-d">{s.about}</p>;
@@ -288,7 +289,9 @@ function LocalSetup({ service: s, checking, onCheck }: { service: VoiceServiceVi
     for (;;) {
       if (!alive.current) return;
       const now = await client.voiceInstall(s.id);
+      if (!alive.current) return;
       if (now.state === "installing") {
+        setInstall({ state: "installing", now });
         await new Promise((done) => setTimeout(done, INSTALL_POLL_MS));
         continue;
       }
@@ -303,6 +306,7 @@ function LocalSetup({ service: s, checking, onCheck }: { service: VoiceServiceVi
     setInstall({ state: "installing" });
     try {
       const started = await client.installVoice(s.id);
+      if (alive.current && started.state === "installing") setInstall({ state: "installing", now: started });
       if (started.state === "failed") setInstall({ state: "failed", message: started.message });
       else await follow();
     } catch (e) {
@@ -320,28 +324,12 @@ function LocalSetup({ service: s, checking, onCheck }: { service: VoiceServiceVi
         <button className="mini go" type="button" disabled={installing || checking} onClick={() => void start()}>
           {installing ? "Installing…" : "Install it"}
         </button>
-        {installing && (
-          <span className="vs-d" role="status">
-            This downloads a few hundred MB once and can take several minutes. You can keep using Open Sourcebook meanwhile.
-          </span>
-        )}
+        {installing && <VoiceInstallProgress now={install.now} />}
       </div>
       {install.state === "failed" && (
         <p className="vs-err" role="alert">
           {install.message}
         </p>
-      )}
-      {s.install && (
-        <>
-          <p className="vs-d">Or run this once in a terminal{s.install.folder ? <>, in <code>{s.install.folder}</code></> : ""}, then check again:</p>
-          <div className="vs-cmd">
-            <code>{s.install.command}</code>
-            <button className="mini" type="button" onClick={() => void navigator.clipboard?.writeText(s.install!.command)}>
-              <Icon name="copy" />
-              Copy
-            </button>
-          </div>
-        </>
       )}
       <button className="mini" type="button" disabled={checking || installing} onClick={onCheck}>
         {checking ? "Checking…" : "Check again"}

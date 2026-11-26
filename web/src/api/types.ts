@@ -1231,8 +1231,16 @@ export interface PairedDevice {
   lastSeenAt: string;
 }
 
-/** An install of a voice that runs on this computer, as the launcher runs it (cli/voice.ts). */
-export type VoiceInstallState = { voice: string } & ({ state: "idle" } | { state: "installing"; since: string } | { state: "done" } | { state: "failed"; message: string });
+/**
+ * An install of a voice that runs on this computer, as the launcher runs it (cli/voice.ts): while installing, `step`
+ * says whether it is getting its code (`package`) or downloading its model (`download`, with bytes so far of all).
+ */
+export type VoiceInstallState = { voice: string } & (
+  | { state: "idle" }
+  | { state: "installing"; since: string; step?: "package" | "download"; loaded?: number; total?: number }
+  | { state: "done" }
+  | { state: "failed"; message: string }
+);
 
 /** The weekly backup into the library, as the launcher keeps it (cli/backups.ts). */
 export interface WeeklyBackup {

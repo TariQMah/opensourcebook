@@ -69,11 +69,12 @@ test("removes a kept key", async () => {
   expect(await screen.findByLabelText("Your Hosted A API key")).toBeInTheDocument();
 });
 
-test("a voice on this computer that isn't installed shows its install command, and Check again asks once more", async () => {
+test("a voice on this computer that isn't installed has Install it and no terminal line, and Check again asks once more", async () => {
   const { calls } = renderWithEngine(<VoiceSetup />);
   await userEvent.click(await screen.findByRole("button", { name: "On this computer" }));
-  expect(screen.getByText("npm run voice:local")).toBeInTheDocument();
-  expect(screen.getByText("services/scenes")).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Install it" })).toBeInTheDocument();
+  expect(screen.queryByText("npm run voice:local")).not.toBeInTheDocument();
+  expect(screen.queryByText(/in a terminal/)).not.toBeInTheDocument();
   expect(screen.queryByRole("region", { name: "Pick a voice" })).not.toBeInTheDocument();
   const before = calls.filter((c) => c.path === "/v1/voice").length;
   await userEvent.click(screen.getByRole("button", { name: "Check again" }));
@@ -92,7 +93,7 @@ test("Install it has the launcher install a voice on this computer, then checks 
   await vi.waitFor(() => expect(calls.filter((c) => c.path === "/v1/voice").length).toBe(before + 1));
 });
 
-test("an install that could not finish says why, and the terminal line is still there", async () => {
+test("an install that could not finish says why", async () => {
   renderWithEngine(<VoiceSetup />, {
     "POST /launcher/voices/:id/install": [202, { voice: "local-b", state: "installing", since: "2026-11-26T00:00:00.000Z" }],
     "GET /launcher/voices/:id": { voice: "local-b", state: "failed", message: "It did not finish. What it said is in voice-local-b.log." },
@@ -100,8 +101,20 @@ test("an install that could not finish says why, and the terminal line is still 
   await userEvent.click(await screen.findByRole("button", { name: "On this computer" }));
   await userEvent.click(screen.getByRole("button", { name: "Install it" }));
   expect(await screen.findByRole("alert")).toHaveTextContent("It did not finish.");
-  expect(screen.getByText("npm run voice:local")).toBeInTheDocument();
 });
+
+test("an install names its first step, then shows the model's download as a bar with MB of MB", async () => {
+  let asked = 0;
+  renderWithEngine(<VoiceSetup />, {
+    "POST /launcher/voices/:id/install": [202, { voice: "local-b", state: "installing", since: "now", step: "package" }],
+    "GET /launcher/voices/:id": () => (++asked < 2 ? { voice: "local-b", state: "installing", since: "now", step: "package" } : { voice: "local-b", state: "installing", since: "now", step: "download", loaded: 41_000_000, total: 92_400_000 }),
+  });
+  await userEvent.click(await screen.findByRole("button", { name: "On this computer" }));
+  await userEvent.click(screen.getByRole("button", { name: "Install it" }));
+  expect(await screen.findByText("Getting the voice ready…")).toBeInTheDocument();
+  expect(await screen.findByText("Downloading the voice: 41 MB of 92 MB", {}, { timeout: 5000 })).toBeInTheDocument();
+  expect(screen.getByRole("progressbar", { name: "Voice download" })).toHaveAttribute("aria-valuenow", "44");
+}, 10000);
 
 test("compact, with nothing chosen, asks to pick a service first and calls onDone once a voice is picked", async () => {
   const onDone = vi.fn();

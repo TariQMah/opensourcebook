@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { errorText } from "../api/errors";
-import type { Provider, VoiceServiceView } from "../api/types";
+import type { Provider, VoiceInstallState, VoiceServiceView } from "../api/types";
 import { useApi } from "../app/context";
 import { useLoad } from "../app/useLoad";
 import { OutlineButton, PrimaryButton } from "../design/Buttons";
 import { Icon } from "../design/Icon";
+import { VoiceInstallProgress } from "../voice/InstallProgress";
 import { VoiceSetup } from "../voice/VoiceSetup";
 import { fetchFfmpeg, installAgent, launcherSetup, signInAgent, type AgentSetup, type LauncherSetup } from "./api";
 import "./setup.css";
@@ -52,7 +53,7 @@ export function GetSetUp({ onReady }: { onReady?: (ready: boolean) => void }) {
   const voice = useLoad(() => client.voice(), [client]);
   const [error, setError] = useState<unknown>();
   const [checking, setChecking] = useState(false);
-  const [voiceJob, setVoiceJob] = useState<{ state: "idle" | "working" | "failed"; message?: string }>({ state: "idle" });
+  const [voiceJob, setVoiceJob] = useState<{ state: "idle" | "working" | "failed"; message?: string; now?: VoiceInstallState }>({ state: "idle" });
   const [keyFor, setKeyFor] = useState<string>();
   const alive = useRef(true);
   useEffect(() => () => void (alive.current = false), []);
@@ -122,6 +123,7 @@ export function GetSetUp({ onReady }: { onReady?: (ready: boolean) => void }) {
       if (!service.installed) {
         let now = await client.installVoice(service.id);
         while (now.state === "installing") {
+          if (alive.current) setVoiceJob({ state: "working", now });
           await new Promise((done) => setTimeout(done, SETUP_POLL_MS));
           if (!alive.current) return;
           now = await client.voiceInstall(service.id);
@@ -292,9 +294,7 @@ export function GetSetUp({ onReady }: { onReady?: (ready: boolean) => void }) {
             <>
               {local &&
                 (voiceJob.state === "working" ? (
-                  <span className="gs-note" role="status">
-                    Setting up the free voice… the first time it downloads a few hundred MB, which can take several minutes.
-                  </span>
+                  <VoiceInstallProgress now={voiceJob.now} />
                 ) : (
                   <PrimaryButton onClick={() => void freeVoice(local)}>Set up the free voice</PrimaryButton>
                 ))}
