@@ -21,7 +21,7 @@ test("hosted services come A to Z by label, then local ones; the test voice and 
   for (const s of all) {
     assert.ok(s.id && s.label && s.about, s.id);
     if (s.where === "hosted" && s.offered) assert.ok(s.key?.name && s.key.label && /^https:\/\//.test(s.key.helpUrl), `${s.id} says what key it needs and where to get one`);
-    if (s.where === "local" && s.offered) assert.ok(s.install?.command && s.install.folder && s.installed, `${s.id} says how to install it`);
+    if (s.where === "local" && s.offered) assert.ok(s.install?.command && s.installed, `${s.id} says how to install it`);
   }
   assert.equal(new Set(all.map((s) => s.id)).size, all.length);
 });

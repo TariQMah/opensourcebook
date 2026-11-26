@@ -8,7 +8,7 @@
  * and a service's own words about a key are cleaned of it before they are passed on. A key the service refuses is not
  * kept; one that is good but out of credits is kept, and its health says so.
  */
-import { chooseVoice, installedFacts } from "./voice-choice.ts";
+import { chooseVoice, installHow, installedFacts } from "./voice-choice.ts";
 import { layered, readVoiceFile, voiceFileNames, writeVoiceFile } from "./voice-file.ts";
 import { silentVoice, voiceDownOf, type Voice, type VoiceHealth } from "./voice.ts";
 import { NoSample, setting, voiceServices, type VoiceOption, type VoiceService, type VoiceSettings } from "./voices.ts";
@@ -25,7 +25,7 @@ export interface VoiceServiceView {
   keySet?: boolean;
   keyHint?: string;
   installed?: boolean;
-  install?: { command: string; folder: string };
+  install?: { command: string; folder?: string };
   listsVoices: boolean;
   /** Whether the service offers a sample of its voices to hear; when not, every voice in its list says `sample: false`. */
   samples: boolean;
@@ -206,7 +206,7 @@ export class VoiceSetup {
     if (!service) throw new VoiceSetupError(400, "unknown_voice_service", `There is no voice service "${body.service}".`);
     const settings = this.settings();
     if (service.key && !setting(settings, service.key.name)) throw new VoiceSetupError(409, "voice_needs_key", `${service.label} needs your key first.`);
-    if (service.installed && !service.installed()) throw new VoiceSetupError(409, "voice_not_installed", `${service.label} is not installed yet: run ${service.install?.command ?? "its install"} in ${service.install?.folder ?? "its folder"}, then check again.`);
+    if (service.installed && !service.installed()) throw new VoiceSetupError(409, "voice_not_installed", `${service.label} is not installed yet: ${installHow(service)}, then check again.`);
     const next: Record<string, string> = { ...file, SCENES_VOICE: service.id };
     if (body.voice !== undefined) {
       if (!service.voiceSetting) throw new VoiceSetupError(400, "invalid_request", `${service.label} has no voices to pick from.`);

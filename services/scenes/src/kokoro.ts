@@ -1,7 +1,8 @@
 /**
  * Kokoro: a voice that runs on this computer, with no key and nothing paid, on a Mac, Linux and Windows alike. It is
  * Kokoro-82M (its weights under Apache 2.0) run by kokoro-js (Apache 2.0) on ONNX Runtime (MIT), and it reads English.
- * It is not part of Open Sourcebook's own install: a person who wants it runs `npm run voice:kokoro` in `services/scenes`, which
+ * It is not part of Open Sourcebook's own install: a person who wants it presses Install in Settings > Voice or runs
+ * `opensourcebook voice install kokoro` (in a clone, `npm run voice:kokoro` in `services/scenes`), which
  * installs it into `voices/kokoro/` and fetches the model once (about 90 MB of the 600 MB, from Hugging Face; no text
  * is ever sent anywhere). After that it works offline. `docs/THIRD-PARTY.md` lists what it brings with it, eSpeak NG among them.
  *
@@ -17,7 +18,7 @@ import { join } from "node:path";
 import { joinSentences, sentences, type Spoken, type SpokenSentence, type Voice } from "./voice.ts";
 import { setting, type VoiceService } from "./voices.ts";
 
-/** Where the person's own install of Kokoro lives (`npm run voice:kokoro`). */
+/** Where the person's own install of Kokoro lives (`opensourcebook voice install kokoro`). */
 export const KOKORO_HOME = join(import.meta.dirname, "..", "voices", "kokoro");
 /** The model and its precision. `voices/kokoro/package.json` fetches the same at install; keep the two alike. */
 export const KOKORO_MODEL = "onnx-community/Kokoro-82M-v1.0-ONNX";
@@ -157,7 +158,7 @@ export function kokoroService(): VoiceService {
     about: "Kokoro, a free voice that runs on this computer with no key and nothing sent anywhere; plainer than the hosted ones. Installed once.",
     voiceSetting: "SCENES_KOKORO_VOICE",
     installed: () => kokoroInstalled(),
-    install: { command: "npm run voice:kokoro", folder: "services/scenes" },
+    install: { command: "opensourcebook voice install kokoro" },
     offered: true,
     build: (s, o) => {
       const voice = setting(s, "SCENES_KOKORO_VOICE");

@@ -91,7 +91,7 @@ test("voice: no key means no sound on every system, in the scenes service's own 
   const kokoro = await gather(root, { PATH: process.env.PATH, SCENES_VOICE: "kokoro" });
   const { kokoroInstalled } = (await import("../../services/scenes/src/kokoro.ts" as string)) as { kokoroInstalled(): boolean };
   if (kokoroInstalled()) assert.deepEqual(voiceLine(kokoro.voice), { status: "ok", text: "Voice: Kokoro, on this computer" });
-  else assert.match(voiceLine(kokoro.voice).text, /^The voice setting is wrong: SCENES_VOICE=kokoro needs it installed on this computer: run npm run voice:kokoro in services\/scenes\.$/);
+  else assert.match(voiceLine(kokoro.voice).text, /^The voice setting is wrong: SCENES_VOICE=kokoro needs it installed on this computer: run opensourcebook voice install kokoro\.$/);
 });
 
 test("voice: the voice chosen in the app's private file wins over the settings, as the scenes service reads it", async () => {

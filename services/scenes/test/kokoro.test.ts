@@ -30,7 +30,7 @@ test("a long sentence is read in phrases, cut after a comma where there is one, 
 
 test("Kokoro is chosen only when a person turns it on, and asked for without its install it says how to get it", () => {
   assert.deepEqual(chooseVoice({ SCENES_VOICE: "kokoro" }, { kokoro: true }), { kind: "kokoro" });
-  assert.throws(() => chooseVoice({ SCENES_VOICE: "kokoro" }, { kokoro: false }), /SCENES_VOICE=kokoro needs it installed on this computer: run npm run voice:kokoro in services\/scenes\./);
+  assert.throws(() => chooseVoice({ SCENES_VOICE: "kokoro" }, { kokoro: false }), /SCENES_VOICE=kokoro needs it installed on this computer: run opensourcebook voice install kokoro\./);
   // Installed but not turned on: no key still means no sound, as before; a key still means ElevenLabs.
   assert.equal(chooseVoice({}, { kokoro: true }).kind, "silent");
   assert.equal(chooseVoice({}, { kokoro: true }).note, NO_KEY_NOTE);

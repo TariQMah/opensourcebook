@@ -34,7 +34,8 @@ const SAY_NOTE = `Videos use this computer's own voice, which is robotic, becaus
 
 /** What a person runs to install a voice on this computer. */
 export function installHow(service: VoiceService): string {
-  return service.install ? `run ${service.install.command} in ${service.install.folder}` : "install it";
+  if (!service.install) return "install it";
+  return `run ${service.install.command}${service.install.folder ? ` in ${service.install.folder}` : ""}`;
 }
 
 /** The hosted service a key picks when none is named: the first in the list whose key is set. */

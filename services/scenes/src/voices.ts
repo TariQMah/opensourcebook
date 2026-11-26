@@ -47,8 +47,8 @@ export interface VoiceService {
   checkKey?(key: string, signal?: AbortSignal): Promise<VoiceHealth>;
   /** Local only: whether it is installed here. */
   installed?(): boolean;
-  /** Local only: what a person runs, once, in which folder, to install it. */
-  install?: { command: string; folder: string };
+  /** Local only: what a person runs, once, to install it, and in which folder when it matters. */
+  install?: { command: string; folder?: string };
   /** False for a voice kept for tests and the no-voice case, never offered to pick in the app. */
   offered: boolean;
   /** The voice, from these settings. */

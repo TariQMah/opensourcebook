@@ -2,10 +2,10 @@
   "name": "opensourcebook-voice-kokoro",
   "private": true,
   "type": "module",
-  "description": "Kokoro, a voice that runs on this computer with no key (src/kokoro.ts). Installed only by a person who wants it: npm run voice:kokoro in services/scenes. The install fetches the model once.",
+  "description": "Kokoro, a voice that runs on this computer with no key (src/kokoro.ts). Installed only by a person who wants it: Install it in Settings > Voice, or opensourcebook voice install kokoro. The install fetches the model once.",
   "license": "MIT",
   "scripts": {
-    "postinstall": "node -e \"import('kokoro-js').then((k) => k.KokoroTTS.from_pretrained('onnx-community/Kokoro-82M-v1.0-ONNX', { dtype: 'q8', device: 'cpu' })).then(() => console.log('Kokoro is ready. Turn it on with SCENES_VOICE=kokoro in services/scenes/.env.'))\""
+    "postinstall": "node -e \"import('kokoro-js').then((k) => k.KokoroTTS.from_pretrained('onnx-community/Kokoro-82M-v1.0-ONNX', { dtype: 'q8', device: 'cpu' })).then(() => console.log('Kokoro is ready. Pick it in Settings > Voice.'))\""
   },
   "dependencies": {
     "kokoro-js": "1.2.1"
