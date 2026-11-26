@@ -25,6 +25,7 @@
  * Whether it is signed in it says itself (`cursor-agent status --format json`, reading only `isAuthenticated`). Its
  * JSON events give each tool call once it is made, not while it is written, so there are no drafts.
  */
+import { programOf } from "./locate.ts";
 import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -48,17 +49,20 @@ export const CURSOR_MCP_TOOLS = ["mcp_tool_call", "get_mcp_tools_tool_call"];
 export const CURSOR_FILE_TOOLS = ["read_tool_call", "edit_tool_call", "ls_tool_call", "glob_tool_call", "grep_tool_call", "update_todos_tool_call", "read_todos_tool_call"];
 
 export function cursorAdapter(options: CursorOptions = {}): AgentAdapter {
-  const bin = options.bin ?? "cursor-agent";
+  const name = options.bin ?? "cursor-agent";
+  // Looked for again at each check and turn, also where it installs itself when that is not on the PATH (./locate.ts).
+  const where = () => programOf(name);
   const catalog = new Remembered<AgentModel[]>(5 * 60_000);
   return {
     id: "cursor",
     label: "Cursor",
     mark: marks.cursor,
-    signIn: `${bin} login`,
+    signIn: `${name} login`,
     // From its own install page.
     install: { command: "curl https://cursor.com/install -fsS | bash", url: "https://cursor.com/docs/cli/installation" },
     filesOnly: { note: CURSOR_FILES },
     async info(): Promise<AgentInfo> {
+      const bin = where();
       const version = await firstLine(bin, ["--version"]);
       if (version.missing || !version.text) return { installed: false };
       const [signedIn, models] = await Promise.all([cursorSignedIn(bin), catalog.get(() => cursorModels(bin))]);
@@ -71,6 +75,7 @@ export function cursorAdapter(options: CursorOptions = {}): AgentAdapter {
       };
     },
     run(spec: TurnSpec): RunningTurn {
+      const bin = where();
       if (spec.workspace?.access === "files") {
         const refused = cursorFolderProblem(spec.cwd);
         if (refused) return { done: Promise.resolve({ ok: false, problem: "error", detail: refused }), kill: () => undefined };

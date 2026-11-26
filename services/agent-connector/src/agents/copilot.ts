@@ -29,6 +29,7 @@
  * `~/.copilot` still run, as in every session of theirs: no flag turns them off for one run. Its JSON events give each
  * tool call once it is made, not while it is written, so there are no drafts.
  */
+import { programOf } from "./locate.ts";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -79,13 +80,15 @@ export const COPILOT_OWN_TOOLS = [
 const WIDENING_ENV = ["COPILOT_ALLOW_ALL", "COPILOT_ASSISTED_APPROVAL", "COPILOT_PLAN_THEN_AUTOPILOT", "COPILOT_CUSTOM_INSTRUCTIONS_DIRS", "COPILOT_SKILLS_DIRS"];
 
 export function copilotAdapter(options: CopilotOptions = {}): AgentAdapter {
-  const bin = options.bin ?? "copilot";
+  const name = options.bin ?? "copilot";
+  // Looked for again at each check and turn, also where it installs itself when that is not on the PATH (./locate.ts).
+  const where = () => programOf(name);
   return {
     id: "copilot",
     label: "GitHub Copilot",
     mark: marks.githubcopilot,
     // Its own sign-in: a GitHub account in the browser.
-    signIn: `${bin} login`,
+    signIn: `${name} login`,
     // From its own install page.
     install: { command: "npm install -g @github/copilot", url: "https://docs.github.com/en/copilot/how-tos/set-up/install-copilot-cli" },
     filesOnly: { note: COPILOT_FILES },
@@ -109,12 +112,14 @@ export function copilotAdapter(options: CopilotOptions = {}): AgentAdapter {
       { id: "xhigh", label: "Extra high", weight: "max" },
     ],
     async info(): Promise<AgentInfo> {
+      const bin = where();
       const version = await firstLine(bin, ["--version"]);
       if (version.missing || !version.text) return { installed: false };
       const number = /\d+\.\d+\.\d+(?:-[\w.]+)?/.exec(version.text)?.[0] ?? version.text;
       return { installed: true, version: number, note: COPILOT_NOTE };
     },
     run(spec: TurnSpec): RunningTurn {
+      const bin = where();
       if (spec.workspace?.access === "files") {
         const out = linksOut(spec.cwd);
         if (out.length) return { done: Promise.resolve({ ok: false, problem: "error", detail: `the folder holds links that lead out of it: ${out.slice(0, 3).join(", ")}` }), kill: () => undefined };

@@ -17,6 +17,7 @@
  * It has no files-only workspace: Codex reads files only through its shell (it has no file-reading tool of its own),
  * so on a plan alone work that asks for a folder runs with Open Sourcebook's tools only.
  */
+import { programOf } from "./locate.ts";
 import { mkdirSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
@@ -54,7 +55,9 @@ export const codexBoxHome = (tmp: string = tmpdir()) => join(tmp, "opensourceboo
 export const OWN_TOOL_FEATURES = ["shell_tool", "unified_exec", "view_image", "multi_agent", "multi_agent_v2", "goals", "apps", "plugins", "hooks", "browser_use", "browser_use_external", "computer_use", "image_generation", "tool_suggest", "skill_search", "sleep_tool", "memories"];
 
 export function codexAdapter(options: CodexOptions = {}): AgentAdapter {
-  const bin = options.bin ?? "codex";
+  const name = options.bin ?? "codex";
+  // Looked for again at each check and turn, also where it installs itself when that is not on the PATH (./locate.ts).
+  const where = () => programOf(name);
   const unready = () => (options.apiKey ? undefined : NO_CODEX_KEY);
   const login = new Remembered<{ signedIn?: boolean }>(30_000);
   const catalog = new Remembered<AgentModel[]>(5 * 60_000);
@@ -64,7 +67,7 @@ export function codexAdapter(options: CodexOptions = {}): AgentAdapter {
     mark: marks.openai,
     maker: "openai",
     boxing: { note: CODEX_FULL, unready, upstream: () => (options.apiKey ? { origin: options.apiOrigin ?? OPENAI, headers: { authorization: `Bearer ${options.apiKey}` }, allows: openaiAllows } : undefined) },
-    signIn: `${bin} login`,
+    signIn: `${name} login`,
     // From its own install page.
     install: { command: "curl -fsSL https://chatgpt.com/codex/install.sh | sh", url: "https://github.com/openai/codex" },
     defaultEfforts: { work: "high" },
@@ -77,6 +80,7 @@ export function codexAdapter(options: CodexOptions = {}): AgentAdapter {
       { id: "max", label: "Max", weight: "max" },
     ],
     async info(): Promise<AgentInfo> {
+      const bin = where();
       const version = await firstLine(bin, ["--version"]);
       if (version.missing || !version.text) return { installed: false };
       const status = await signedIn(bin);
@@ -85,6 +89,7 @@ export function codexAdapter(options: CodexOptions = {}): AgentAdapter {
       return { installed: true, version: version.text.replace(/^codex-cli\s*/, ""), ...status, ...(onKey ? { apiKey: true, note: CODEX_ON_KEY } : {}), ...(models.length ? { models } : {}) };
     },
     run(spec: TurnSpec): RunningTurn {
+      const bin = where();
       if (spec.workspace && (spec.workspace.access !== "full" || unready() || !spec.workspace.model || !spec.workspace.box)) return { done: Promise.resolve({ ok: false, problem: "error", detail: unready() ?? NO_CODEX_KEY }), kill: () => undefined };
       const seen: CodexFacts = {};
       let killed = false;

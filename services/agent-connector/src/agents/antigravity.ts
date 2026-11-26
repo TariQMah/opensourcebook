@@ -47,6 +47,7 @@
  * Whether it is signed in it has no documented command to say, and Open Sourcebook does not read its keychain, so that is left
  * unsaid until a turn says otherwise (`authentication required`).
  */
+import { programOf } from "./locate.ts";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
@@ -92,7 +93,9 @@ export const geminiAllows = (method: string, path: string) =>
 export const GATE_HOOK = "opensourcebook-only-opensourcebook-tools";
 
 export function antigravityAdapter(options: AntigravityOptions = {}): AgentAdapter {
-  const bin = options.bin ?? "agy";
+  const name = options.bin ?? "agy";
+  // Looked for again at each check and turn, also where it installs itself when that is not on the PATH (./locate.ts).
+  const where = () => programOf(name);
   const unready = () => (options.apiKey ? undefined : NO_GEMINI_KEY);
   const catalog = new Remembered<AgentModel[]>(5 * 60_000);
   const stateDir = options.stateDir ?? defaultStateDir();
@@ -107,7 +110,7 @@ export function antigravityAdapter(options: AntigravityOptions = {}): AgentAdapt
     }
     const current: { version: string; running?: Promise<CheckVerdict>; verdict?: CheckVerdict; at?: number } = { version };
     check = current;
-    current.running = checkAntigravity(bin, options.checkTimeoutMs).then((verdict) => {
+    current.running = checkAntigravity(where(), options.checkTimeoutMs).then((verdict) => {
       if (verdict.ok) savePass(stateDir, version);
       current.verdict = verdict;
       current.at = Date.now();
@@ -117,6 +120,7 @@ export function antigravityAdapter(options: AntigravityOptions = {}): AgentAdapt
     return current.running;
   };
   const startTurn = (spec: TurnSpec, boxedTurn: boolean): RunningTurn => {
+    const bin = where();
     // A turn on the person's sign-in: its hook's script in a folder of the turn's own, outside the folder it works in.
     const gate = boxedTurn ? undefined : mkdtempSync(join(tmpdir(), "opensourcebook-agy-gate-"));
     let command: { bin: string; args: string[]; env: NodeJS.ProcessEnv };
@@ -162,7 +166,7 @@ export function antigravityAdapter(options: AntigravityOptions = {}): AgentAdapt
     label: "Antigravity",
     mark: marks.antigravity,
     // Its first interactive run signs in with a Google account (docs/install).
-    signIn: bin,
+    signIn: name,
     // From its own install page (docs/getting-started, the CLI tab): macOS and Linux.
     install: { command: "curl -fsSL https://antigravity.google/cli/install.sh | bash", url: "https://antigravity.google/docs/getting-started?tab=cli" },
     boxing: { note: ANTIGRAVITY_FULL, unready, upstream: () => (options.apiKey ? { origin: options.apiOrigin ?? GEMINI_API, headers: { "x-goog-api-key": options.apiKey }, allows: geminiAllows } : undefined) },
@@ -183,6 +187,7 @@ export function antigravityAdapter(options: AntigravityOptions = {}): AgentAdapt
       { id: "max", label: "Max", weight: "max" },
     ],
     async info(): Promise<AgentInfo> {
+      const bin = where();
       const version = await firstLine(bin, ["--version"]);
       if (version.missing || !version.text) return { installed: false };
       const models = await catalog.get(() => antigravityModels(bin));
@@ -194,6 +199,7 @@ export function antigravityAdapter(options: AntigravityOptions = {}): AgentAdapt
       return { installed: true, version: v, ...(unavailable ? { unavailable } : {}), ...(models.length ? { models } : {}) };
     },
     run(spec: TurnSpec): RunningTurn {
+      const bin = where();
       const refuse = (detail: string): RunningTurn => ({ done: Promise.resolve({ ok: false, problem: "error", detail }), kill: () => undefined });
       const boxedTurn = spec.workspace?.access === "full";
       if (spec.workspace && !boxedTurn) return refuse("it has no files-only workspace");

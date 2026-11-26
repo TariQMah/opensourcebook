@@ -35,6 +35,7 @@
  *
  * The key also answers a turn when the CLI is not signed in.
  */
+import { programOf } from "./locate.ts";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -96,7 +97,9 @@ export const CLAUDE_FILES = "Works in each piece of work's own folder with its f
 export const CLAUDE_FULL = "Works in each piece of work's own folder with its own shell, files and web, walled in on this Mac, on the Anthropic API key in Open Sourcebook's connector settings.";
 
 export function claudeAdapter(options: ClaudeOptions = {}): AgentAdapter {
-  const bin = options.bin ?? "claude";
+  const name = options.bin ?? "claude";
+  // Looked for again at each check and turn, also where it installs itself when that is not on the PATH (./locate.ts).
+  const where = () => programOf(name, [".claude/local"]);
   // A turn on the key only when the CLI is not signed in; asked again at most every half minute.
   const login = new Remembered<{ signedIn?: boolean }>(30_000);
   return {
@@ -112,7 +115,7 @@ export function claudeAdapter(options: ClaudeOptions = {}): AgentAdapter {
       unready: () => (options.apiKey ? undefined : NO_CLAUDE_KEY),
       upstream: () => (options.apiKey ? { origin: options.apiOrigin ?? ANTHROPIC, headers: { "x-api-key": options.apiKey }, allows: anthropicAllows } : undefined),
     },
-    signIn: `${bin} auth login`,
+    signIn: `${name} auth login`,
     // From its own install page.
     install: { command: "curl -fsSL https://claude.ai/install.sh | bash", url: "https://code.claude.com/docs/en/setup" },
     // The CLI's own aliases: each always means that family's newest model.
@@ -133,6 +136,7 @@ export function claudeAdapter(options: ClaudeOptions = {}): AgentAdapter {
       { id: "max", label: "Max", weight: "max" },
     ],
     async info(): Promise<AgentInfo> {
+      const bin = where();
       const version = await firstLine(bin, ["--version"]);
       if (version.missing || !version.text) return { installed: false };
       const status = await signedIn(bin);
@@ -140,6 +144,7 @@ export function claudeAdapter(options: ClaudeOptions = {}): AgentAdapter {
       return { installed: true, version: version.text.replace(/\s*\(Claude Code\)\s*$/, ""), ...status, ...(onKey ? { apiKey: true, note: CLAUDE_ON_KEY } : {}) };
     },
     run(spec: TurnSpec): RunningTurn {
+      const bin = where();
       if (spec.workspace?.access === "full" && (!spec.workspace.model || !spec.workspace.box)) return { done: Promise.resolve({ ok: false, problem: "error", detail: NO_CLAUDE_KEY }), kill: () => undefined };
       // Passed via file so long prompts stay clear of OS argv limits; inside a boxed turn's own tmp when boxed.
       const promptDir = spec.workspace?.tmp ? undefined : mkdtempSync(join(tmpdir(), "opensourcebook-claude-prompt-"));

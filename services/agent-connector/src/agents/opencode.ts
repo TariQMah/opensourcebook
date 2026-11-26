@@ -19,6 +19,7 @@
  * box shuts, so its own rules are the only wall. Its JSON output gives each tool call once it is made, not while it
  * is written, so there are no drafts.
  */
+import { programOf } from "./locate.ts";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -45,17 +46,20 @@ export const OPENCODE_NOTE ="Answers with the models OpenCode offers on this com
 const AGENT = MCP_SERVER;
 
 export function openCodeAdapter(options: OpenCodeOptions = {}): AgentAdapter {
-  const bin = options.bin ?? "opencode";
+  const name = options.bin ?? "opencode";
+  // Looked for again at each check and turn, also where it installs itself when that is not on the PATH (./locate.ts).
+  const where = () => programOf(name, [".opencode/bin"]);
   const catalog = new Remembered<AgentModel[]>(5 * 60_000);
   return {
     id: "opencode",
     label: "OpenCode",
     mark: marks.opencode,
-    signIn: `${bin} auth login`,
+    signIn: `${name} auth login`,
     // From its own install page.
     install: { command: "curl -fsSL https://opencode.ai/v2/install | bash", url: "https://opencode.ai/docs" },
     filesOnly: { note: OPENCODE_FILES },
     async info(): Promise<AgentInfo> {
+      const bin = where();
       const version = await firstLine(bin, ["--version"]);
       if (version.missing || !version.text) return { installed: false };
       const models = await catalog.get(() => openCodeModels(bin));
@@ -64,6 +68,7 @@ export function openCodeAdapter(options: OpenCodeOptions = {}): AgentAdapter {
       return { installed: true, version: version.text.replace(/^opencode\s+v?/i, ""), note: OPENCODE_NOTE, ...(models.length ? { models } : {}) };
     },
     run(spec: TurnSpec): RunningTurn {
+      const bin = where();
       const out = spec.workspace?.access === "files" ? linksOut(spec.cwd) : [];
       if (out.length) return { done: Promise.resolve({ ok: false, problem: "error", detail: `the folder holds links that lead out of it: ${out.slice(0, 3).join(", ")}` }), kill: () => undefined };
       // Open Sourcebook's prompt added to OpenCode's own goes in as an instructions file, in a folder of the turn's own.
