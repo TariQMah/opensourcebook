@@ -17,9 +17,10 @@ Open Sourcebook keeps its data in one folder of its own, the app data folder, ne
 | `app/` | The programs | the desktop app |
 | `state/` | The launcher's state: secrets, ports, logs, the voice chosen | `OPENSOURCEBOOK_STATE` |
 | `data/` | The engine's saved projects, sources and files | the engine's `--persist-to` |
-| `jobs/` | One job folder per video, and the scenes service's other files (`audio/`, its caches) | `SCENES_DATA_DIR` |
+| `jobs/` | One job folder per video, and nothing else | `SCENES_JOBS_DIR` |
+| `scenes/` | The scenes service's other files: `audio/`, the voice's caches (`.voice`, `.kit`), style previews, `speed.json` | `SCENES_DATA_DIR` |
 
-The launcher sets all three from one setting, `OPENSOURCEBOOK_APP_DATA`, the app data folder. Without it (a clone started with `npm start`) everything stays where it was: `.opensourcebook/` at the repo root, `engine/.wrangler/state` and `services/scenes/.data`.
+The launcher sets them from one setting, `OPENSOURCEBOOK_APP_DATA`, the app data folder. Without it (a clone started with `npm start`) everything stays where it was: `.opensourcebook/` at the repo root, `engine/.wrangler/state` and `services/scenes/.data`, which holds the job folders too, as `SCENES_JOBS_DIR` left unset is `SCENES_DATA_DIR` itself.
 
 ## What a job folder holds
 
@@ -72,7 +73,7 @@ with `timestampMs`, `width` and `height` when the engine knows them. The picture
 
 ## Kept, then cleaned up
 
-A job folder stays after its video is done, failed or stopped, so trying again or making one scene again is fast. The scenes service cleans up when it starts and after each job ends: a job is kept while it is among the last 10 changed (`SCENES_KEEP_JOBS`) or was changed in the last 7 days (`SCENES_KEEP_DAYS`), and a job being made is never removed. Only folders with a `job.json` are jobs; nothing else in `jobs/` is touched. The engine keeps its own copy of every finished video, so a cleaned-up job only means a scene of it can no longer be made again on its own.
+A job folder stays after its video is done, failed or stopped, so trying again or making one scene again is fast. The scenes service cleans up when it starts and after each job ends: a job is kept while it is among the last 10 changed (`SCENES_KEEP_JOBS`) or was changed in the last 7 days (`SCENES_KEEP_DAYS`), and a job being made is never removed. Only folders with a `job.json` are jobs; nothing else in the jobs folder is touched. The engine keeps its own copy of every finished video, so a cleaned-up job only means a scene of it can no longer be made again on its own.
 
 ## The library
 

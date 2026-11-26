@@ -128,6 +128,21 @@ test("a finished video is copied to the library under its title, and not at all 
   assert.equal(readFileSync(join(library, "Cells how why 2.mp4"), "utf8"), "mp4");
 });
 
+test("with a jobs folder of their own, job folders go there and nothing of them in the service's data folder", async () => {
+  const dataDir = join(root, "data-apart");
+  const jobsDir = join(root, "jobs-apart");
+  const connector = new Connector({ url: "http://127.0.0.1:9", token: "connector-token-0123456789" });
+  const jobs = new Jobs({ dataDir, jobsDir, connector, voice: silentVoice(), styles: listStyles, callbackBase: () => "http://127.0.0.1:9", log: () => undefined });
+  jobs.create({ ...request(), id: "apart-1" });
+  for (let i = 0; i < 200 && jobs.get("apart-1")?.state !== "failed"; i++) await new Promise((r) => setTimeout(r, 25));
+  assert.equal(jobs.folder("apart-1"), join(jobsDir, "apart-1"));
+  assert.ok(existsSync(join(jobsDir, "apart-1", "job.json")) && existsSync(join(jobsDir, "apart-1", "README.md")));
+  assert.ok(!existsSync(join(dataDir, "apart-1")));
+  // Read back from the jobs folder when the service starts again.
+  assert.equal(new Jobs({ dataDir, jobsDir, connector, voice: silentVoice(), styles: listStyles, callbackBase: () => "", log: () => undefined }).get("apart-1")?.id, "apart-1");
+  assert.equal(new Jobs({ dataDir: jobsDir, connector, voice: silentVoice(), styles: listStyles, callbackBase: () => "", log: () => undefined }).jobsDir, jobsDir, "left out, it is the data folder");
+});
+
 test("the folder opens in this computer's file manager", () => {
   assert.deepEqual(openCommand("/x", "darwin"), { bin: "open", args: ["/x"] });
   assert.deepEqual(openCommand("C:\\x", "win32"), { bin: "explorer.exe", args: ["C:\\x"] });

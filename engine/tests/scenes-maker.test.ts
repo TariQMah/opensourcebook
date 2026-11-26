@@ -111,6 +111,19 @@ describe("scenes maker: making a video", () => {
     ]);
   });
 
+  it("sends a linked folder's file by its path, and the folder the finished video is copied into", async () => {
+    const t = setup({ settings: { style: "blueprint", minutes: 1 } });
+    t.ctx.sources = [{ ...source, path: "/Users/me/Course/sky.md" }];
+    t.ctx.services.libraryFolder = async () => "/Users/me/Documents/Open Sourcebook/Sky";
+    await runEngine(t.definition, t.ctx);
+    const sent = t.service.videos.get("job-1")!.body;
+    expect(sent.sources).toEqual([{ id: "src-1", title: "Sky notes", kind: "text", path: "/Users/me/Course/sky.md" }]);
+    expect(sent.library).toBe("/Users/me/Documents/Open Sourcebook/Sky");
+    const plain = setup({ settings: { style: "blueprint", minutes: 1 } });
+    await runEngine(plain.definition, plain.ctx);
+    expect(plain.service.videos.get("job-1")!.body).not.toHaveProperty("library");
+  });
+
   it("opens a video's job folder on this computer through the service, by the video the job follows, and says so when it is gone", async () => {
     const t = setup({ settings: { style: "blueprint", minutes: 1 } });
     await runEngine(t.definition, t.ctx);

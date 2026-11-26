@@ -69,6 +69,8 @@ export interface NodeSource {
   envelope: SourceEnvelope;
   chunks: SourceChunk[];
   range?: SourceLocator;
+  /** The file on this computer it is read from, for a file of a linked folder (#71). */
+  path?: string;
 }
 
 /** Grounding for one claim. `anchor` says where in the payload it applies (engine-defined path). */
@@ -164,6 +166,12 @@ export interface EngineServices {
    * it here (a direct `runEngine` in a test): the pick is sent as it is.
    */
   settlePick?(scope: string, pick: { agent?: string; model?: string; effort?: string }): Promise<{ agent?: string; model?: string; effort?: string }>;
+  /**
+   * The folder on this computer a finished file of this job is copied into (docs/JOB-FOLDER.md, "The library"): the
+   * project's linked folder, else the project's own folder in the library. Undefined when there is none here (no
+   * project, or an engine not on the person's computer). Nothing is made on disk by asking.
+   */
+  libraryFolder?(): Promise<string | undefined>;
 }
 
 /**

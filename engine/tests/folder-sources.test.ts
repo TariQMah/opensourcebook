@@ -7,6 +7,8 @@ import { ownerIdForToken } from "../src/http";
 import { handleRequest } from "../src/index";
 import { CLIENT_TOKEN, authed, bodyOf, createTestEngine } from "./support/engine-harness";
 import { FakeFiles } from "./support/fake-files";
+import { folderName } from "../src/local-files";
+import { libraryFolderOf } from "../src/studio/output-runner";
 
 const FOLDER = "/Users/me/Course";
 
@@ -154,3 +156,25 @@ describe("the library", () => {
   });
 });
 
+describe("where a project's finished video is copied", () => {
+  it("its linked folder, else its own folder in the library, named once from its title and never renamed", async () => {
+    const t = await setup();
+    const repos = t.engine.deps.repos;
+    const project = (await repos.projects.get(t.project.id))!;
+    expect(await libraryFolderOf(repos, t.files, project)).toBe("/Users/me/Documents/Open Sourcebook/Cells");
+    await repos.projects.update(project.id, { title: "Cells: part 2/3" });
+    expect(await libraryFolderOf(repos, t.files, (await repos.projects.get(project.id))!)).toBe("/Users/me/Documents/Open Sourcebook/Cells");
+    const other = await repos.projects.create({ ownerId: project.ownerId, title: "Cells: part 2/3" });
+    expect(await libraryFolderOf(repos, t.files, other)).toBe("/Users/me/Documents/Open Sourcebook/Cells part 2 3");
+    t.files.put(FOLDER, "a.md", "Text of a.");
+    await t.call(`/v1/projects/${t.project.id}/folder`, "PUT", { path: FOLDER });
+    expect(await libraryFolderOf(repos, t.files, (await repos.projects.get(project.id))!)).toBe(FOLDER);
+  });
+
+  it("a project's title becomes a folder name any system takes", () => {
+    expect(folderName("Cells: how/why?")).toBe("Cells how why");
+    expect(folderName("..hidden")).toBe("hidden");
+    expect(folderName("  ")).toBe("Project");
+    expect(folderName("Ends with a dot.")).toBe("Ends with a dot");
+  });
+});

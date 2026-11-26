@@ -30,7 +30,8 @@ import type { FetchLike, StructuredProvider, UsageSink } from "../types/provider
 import { runEngine, type FormatRegistry } from "./registry";
 import { reviewScope, timeBucket, usableTiming } from "./timing";
 import type { StudioRepositories } from "./repositories";
-import type { Settings } from "./repositories/projects";
+import type { Project, Settings } from "./repositories/projects";
+import { folderName, joinPath, type LocalFiles } from "../local-files";
 import type {
   EngineCheckpoint,
   EngineContext,
@@ -81,6 +82,8 @@ export interface OutputRunnerOptions {
    * reached (the turn then says so). Absent: picks are sent as they are.
    */
   settlePick?(ownerId: string, scope: string, pick: TurnPick): Promise<TurnPick | undefined>;
+  /** This computer's files, for where a finished file is copied (`EngineServices.libraryFolder`); absent when deployed. */
+  localFiles?: LocalFiles;
 }
 
 /** Share of a job's progress bar spent extracting before the engine starts. */
@@ -174,6 +177,8 @@ export class OutputJobRunner implements JobRunner {
       if (project && project.ownerId === job.ownerId) {
         const packs = projectPacks(project.settings);
         ctx.project = { id: project.id, title: project.title, ...(packs.length > 0 ? { packs } : {}) };
+        const files = this.options.localFiles;
+        if (files) ctx.services.libraryFolder = () => libraryFolderOf(repos, files, project);
       }
     }
 
@@ -318,6 +323,7 @@ export class OutputJobRunner implements JobRunner {
           envelope: extracted.envelope,
           chunks: extracted.chunks,
           ...(use.range ? { range: use.range } : {}),
+          ...(source.filePath ? { path: source.filePath } : {}),
         });
       } catch (error) {
         // A missing upload will not appear on retry; anything else (a busy or
@@ -327,6 +333,22 @@ export class OutputJobRunner implements JobRunner {
       }
     }
     return loaded;
+  }
+}
+
+/**
+ * Where a project's finished files are copied: its linked folder, else `<library>/<its folder name>`, the name kept
+ * from the first time so renaming the project never renames the folder. Undefined when this computer cannot say.
+ */
+export async function libraryFolderOf(repos: StudioRepositories, files: LocalFiles, project: Project): Promise<string | undefined> {
+  if (project.folder) return project.folder;
+  try {
+    const library = await files.library();
+    const name = (await repos.projects.keepLibraryName(project.id, folderName(project.title))) ?? folderName(project.title);
+    return joinPath(library.folder, name);
+  } catch (error) {
+    console.warn(`Project ${project.id}: where its finished files go could not be found: ${error instanceof Error ? error.message : String(error)}`);
+    return undefined;
   }
 }
 

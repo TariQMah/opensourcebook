@@ -137,7 +137,13 @@ export interface Heartbeat {
 }
 
 export interface JobsOptions {
+  /** The service's own data folder. */
   dataDir: string;
+  /**
+   * Where the job folders are, one per video and nothing else of the service's (SCENES_JOBS_DIR): `dataDir` itself when
+   * left out, as a clone keeps them (docs/JOB-FOLDER.md).
+   */
+  jobsDir?: string;
   connector: Connector;
   /** The voice, or what gives the voice of the moment; a video keeps the voice it started a run with. */
   voice: VoiceSource;
@@ -273,7 +279,7 @@ export class Jobs {
     this.log = o.log ?? ((line) => console.log(line));
     this.beat = { ...HEARTBEAT, ...(o.idleMinutes !== undefined ? { idleMs: o.idleMinutes * 60_000 } : {}), ...o.heartbeat };
     this.now = o.now ?? Date.now;
-    mkdirSync(o.dataDir, { recursive: true });
+    mkdirSync(this.jobsDir, { recursive: true });
     this.load();
     this.cleanUp();
   }
@@ -313,8 +319,8 @@ export class Jobs {
    */
   private load(): void {
     const carry: JobRecord[] = [];
-    for (const id of readdirSync(this.o.dataDir)) {
-      const file = join(this.o.dataDir, id, "job.json");
+    for (const id of readdirSync(this.jobsDir)) {
+      const file = join(this.jobsDir, id, "job.json");
       if (!existsSync(file)) continue;
       try {
         const job = JSON.parse(readFileSync(file, "utf8")) as JobRecord;
@@ -344,8 +350,13 @@ export class Jobs {
     return this.jobs.get(id);
   }
 
+  /** Where the job folders are (`JobsOptions.jobsDir`). */
+  get jobsDir(): string {
+    return this.o.jobsDir ?? this.o.dataDir;
+  }
+
   folder(id: string): string {
-    return join(this.o.dataDir, id);
+    return join(this.jobsDir, id);
   }
 
   /** Starts a job, or returns the one with this id (the engine's job id makes a start idempotent). */

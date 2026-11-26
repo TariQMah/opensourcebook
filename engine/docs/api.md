@@ -2057,8 +2057,11 @@ folder, the whole disk and the Mac's `~/Library` are refused.
 
 **The library (Nov 26, 2026; local only).** `GET /v1/library` → `200 {
 library: { folder, chosen } }`; `PUT /v1/library { folder: string | null }`
-picks it (`null` goes back to the usual `Documents/Open Sourcebook`).
-Nothing in the library is moved, renamed or deleted.
+picks it (`null` goes back to the usual `Documents/Open Sourcebook`). A
+finished video is copied into the project's linked folder, else into
+`<library>/<project folder>`, the folder named from the project's title the
+first time (`libraryName`) and never renamed (docs/JOB-FOLDER.md, "The
+library"). Nothing in the library is moved, renamed or deleted.
 
 **Google Drive, by a shared link.** Open Sourcebook does not sign in to Google Drive. A
 Drive, Docs, Slides or Sheets link is added like any link (`POST

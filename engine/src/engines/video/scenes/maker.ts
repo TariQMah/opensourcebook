@@ -409,6 +409,8 @@ class ScenesEngine implements OutputEngine<VideoSettings, ScenesBlueprint, Video
     await ctx.services.progress({ stage: "writing", progress: 0.04, step: "Asking your agent to start" });
     // The project's packs go with the video, so the agent that makes it reads them as the byte and quiz makers do.
     const packs = packSkills(ctx.project?.packs ?? []);
+    // Where the finished video is copied: the project's linked folder, else its folder in the library.
+    const library = await ctx.services.libraryFolder?.();
     await this.call(() =>
       this.client.start(
         {
@@ -425,6 +427,7 @@ class ScenesEngine implements OutputEngine<VideoSettings, ScenesBlueprint, Video
           ...reviewOf(ctx.node.settings, picked.agent),
           passages: passages.map(toWirePassage),
           sources: readSources(ctx.sources).map(toWireSource),
+          ...(library ? { library } : {}),
           ...(packs.length > 0 ? { skills: packs } : {}),
           limits: {
             maxScenes: VIDEO_LIMITS.maxScenes,
@@ -728,7 +731,14 @@ function toWireSource(source: NodeSource): ScenesSource {
       ...(asset.height ? { height: asset.height } : {}),
       ...(asset.contentType ? { contentType: asset.contentType } : {}),
     }));
-  return { id: source.sourceId, title: source.title ?? envelope.title ?? "Source", kind: envelope.kind, ...(url && /^https?:\/\//.test(url) ? { url } : {}), ...(pictures.length > 0 ? { pictures } : {}) };
+  return {
+    id: source.sourceId,
+    title: source.title ?? envelope.title ?? "Source",
+    kind: envelope.kind,
+    ...(url && /^https?:\/\//.test(url) ? { url } : {}),
+    ...(source.path ? { path: source.path } : {}),
+    ...(pictures.length > 0 ? { pictures } : {}),
+  };
 }
 
 /** Where a passage sits, in a few words for the agent. */

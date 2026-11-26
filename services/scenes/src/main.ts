@@ -40,6 +40,8 @@ if (connectorToken.length < 16) {
 }
 const port = Number(env.SCENES_PORT ?? 8670);
 const dataDir = env.SCENES_DATA_DIR?.trim() || join(import.meta.dirname, "..", ".data");
+// The job folders, one per video and nothing else (docs/JOB-FOLDER.md); in the data folder itself unless set apart.
+const jobsDir = env.SCENES_JOBS_DIR?.trim() || dataDir;
 // No clock by default: the agent works until it finishes or the person stops it. SCENES_TURN_MINUTES sets one.
 const minutes = Number(env.SCENES_TURN_MINUTES ?? 0);
 // A hung agent is told from a slow one by its calls: none to Open Sourcebook's tools for this long stops its turn, the work kept
@@ -75,6 +77,7 @@ const keepRaw = env.SCENES_KEEP_AGENT_PROMPT?.trim();
 const keepAgentPrompt = keepRaw ? (/^(1|true|yes)$/i.test(keepRaw) ? true : /^(0|false|no)$/i.test(keepRaw) ? false : undefined) : undefined;
 const jobs = new Jobs({
   dataDir,
+  jobsDir,
   connector,
   voice,
   styles: listStyles,
@@ -103,7 +106,7 @@ const server = createScenesServer({ token, jobs, audio, connector, voice, setup,
 server.listen(port, "127.0.0.1", () => {
   base = `http://127.0.0.1:${port}`;
   void measureStyles(speed, listStyles().map((s) => s.id), { folder: join(dataDir, ".speed"), concurrency: framesAtOnce(thisMachine()).frames, log: (line) => console.log(line) }).then(() => rmSync(join(dataDir, ".speed"), { recursive: true, force: true }));
-  console.log(`Open Sourcebook scenes service on ${base}: agent through ${connector.config.url} (${connector.config.model ?? "its own default model for a video"}), voice ${setup.current().id}, ${listStyles().length} styles offered of ${allStyles().length}, data in ${dataDir}${chrome ? `, Chrome ${chrome}` : ""}, toolbox: ${boxTools(toolbox).map((t) => t.name).join(", ")}, fresh viewer ${review.on ? `on${review.model || review.effort ? ` (${[review.model, review.effort].filter(Boolean).join(", ")})` : ""}` : "off"}. This computer only.`);
+  console.log(`Open Sourcebook scenes service on ${base}: agent through ${connector.config.url} (${connector.config.model ?? "its own default model for a video"}), voice ${setup.current().id}, ${listStyles().length} styles offered of ${allStyles().length}, data in ${dataDir}${jobsDir !== dataDir ? `, jobs in ${jobsDir}` : ""}${chrome ? `, Chrome ${chrome}` : ""}, toolbox: ${boxTools(toolbox).map((t) => t.name).join(", ")}, fresh viewer ${review.on ? `on${review.model || review.effort ? ` (${[review.model, review.effort].filter(Boolean).join(", ")})` : ""}` : "off"}. This computer only.`);
 });
 for (const signal of ["SIGINT", "SIGTERM"] as const) process.on(signal, () => server.close(() => process.exit(0)));
 

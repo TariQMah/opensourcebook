@@ -164,6 +164,7 @@ export function depsForEnv(env: WorkerEnv): EngineDeps | undefined {
         fetch: fetchImpl,
         sourceFetch: defaultFetch,
         ...(work ? { settlePick: workPickSettler(repos, work) } : {}),
+        ...(localFiles ? { localFiles } : {}),
       }),
     },
     ...(env.OPENSOURCEBOOK_BYTE_QUEUE ? { queue: env.OPENSOURCEBOOK_BYTE_QUEUE } : {}),

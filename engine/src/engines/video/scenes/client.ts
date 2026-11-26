@@ -163,7 +163,7 @@ export interface ScenesSource {
   title: string;
   kind: string;
   url?: string;
-  /** The original file on this computer, when the source is one; none while uploads are kept only in the engine. */
+  /** The original file on this computer, when the source is one (a file of a linked folder); none for an upload kept only in the engine. */
   path?: string;
   pictures?: Array<{ url: string; kind: string; caption?: string; page?: number; timestampMs?: number; width?: number; height?: number; contentType?: string }>;
 }
@@ -195,6 +195,8 @@ export interface NewScenesVideo {
   passages: ScenesPassage[];
   /** The sources the passages are from, for the video's job folder; an older service ignores them. */
   sources?: ScenesSource[];
+  /** The folder the finished video is copied into: the project's linked folder, else its folder in the library. */
+  library?: string;
   limits?: ScenesLimits;
   /** Skills for the video agent beyond the service's own: the project's packs, each by folder name with its files. */
   skills?: Array<{ name: string; files: Record<string, string> }>;
