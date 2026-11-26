@@ -15,6 +15,7 @@ import { LibrarySection } from "./settings/LibrarySection";
 import { PhoneSection } from "./settings/PhoneSection";
 import { ProvidersSection } from "./settings/ProvidersSection";
 import { RemindersSection } from "./settings/RemindersSection";
+import { SetupSection } from "./settings/SetupSection";
 import { useNarrow } from "./settings/useNarrow";
 import { VideosSettings } from "./settings/VideosSettings";
 import { VoiceSettings } from "./settings/VoiceSettings";
@@ -23,6 +24,7 @@ import "./settings.css";
 /** Settings' sections, in order; each opens at `/settings#<id>`. Advanced sits apart at the end. */
 const SECTIONS = [
   { id: "makers", label: "What makes what", view: () => <MakersSettings /> },
+  { id: "setup", label: "Get set up", view: () => <SetupSection /> },
   { id: "providers", label: "Providers", view: () => <ProvidersSection /> },
   { id: "voice", label: "Voice", view: () => <VoiceSettings /> },
   { id: "videos", label: "Videos", view: () => <VideosSettings /> },
