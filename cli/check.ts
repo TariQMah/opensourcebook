@@ -160,7 +160,7 @@ async function agentFacts(root: string, env: NodeJS.ProcessEnv): Promise<AgentFa
 }
 
 /** The voice these settings give, asked of the scenes service's own code, so the words are never written twice. */
-async function voiceFacts(root: string, env: Record<string, string | undefined>): Promise<Facts["voice"]> {
+async function voiceFacts(root: string, env: Record<string, string | undefined>, installed?: Record<string, boolean | undefined>): Promise<Facts["voice"]> {
   try {
     const scenes = join(root, "services", "scenes", "src");
     type Settings = Record<string, string | undefined>;
@@ -170,14 +170,19 @@ async function voiceFacts(root: string, env: Record<string, string | undefined>)
     // The voice chosen in the app is kept in a private file laid over the settings, as the service reads it.
     const path = env.SCENES_VOICE_FILE?.trim() || join(stateFolder(root, env), "voice.json");
     const settings = file.layered(env, file.readVoiceFile(path, file.voiceFileNames(list.voiceServices())));
-    const { kind, note } = choice.chooseVoice(settings, choice.installedFacts());
+    const { kind, note } = choice.chooseVoice(settings, installed ?? choice.installedFacts());
     return note ? { note } : kind === "kokoro" || kind === "speechify" ? { kind } : {};
   } catch (error) {
     return { problem: error instanceof Error ? error.message.split("\n")[0]! : String(error) };
   }
 }
 
-export async function gather(root: string, env: NodeJS.ProcessEnv = process.env): Promise<Facts> {
+export interface GatherOptions {
+  /** For tests: what each voice that runs on this computer says of its install, instead of asking it. */
+  voicesInstalled?: Record<string, boolean | undefined>;
+}
+
+export async function gather(root: string, env: NodeJS.ProcessEnv = process.env, options: GatherOptions = {}): Promise<Facts> {
   const ffmpeg = firstLineOf(env.FFMPEG_PATH || "ffmpeg", ["-version"]);
   const scenesEnv = readEnvFile(join(root, "services", "scenes", ".env"));
   return {
@@ -185,7 +190,7 @@ export async function gather(root: string, env: NodeJS.ProcessEnv = process.env)
     node: process.versions.node,
     ffmpeg: ffmpeg ? (/ffmpeg version (\S+)/.exec(ffmpeg)?.[1] ?? ffmpeg) : null,
     agents: await agentFacts(root, env),
-    voice: await voiceFacts(root, carryOldNames({ ...scenesEnv, ...env })),
+    voice: await voiceFacts(root, carryOldNames({ ...scenesEnv, ...env }), options.voicesInstalled),
     chrome: findChrome(root, env),
     missingPackages: missingPackages(root, stateFolder(root, env)),
     webDevVars: existsSync(join(root, "web", ".dev.vars")),

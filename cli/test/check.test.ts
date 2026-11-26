@@ -80,18 +80,29 @@ test("voice: no key means no sound on every system, in the scenes service's own 
   assert.equal(none.notice, true);
   assert.equal(none.text, "No voice set up: videos are made without sound, with captions carrying the words. For a voice, pick one in Settings, under Voice.");
   assert.equal(voiceLine({ problem: "SCENES_VOICE=robot is not a voice" }).status, "missing");
-  // What is gathered is the service's own choice, so the wording cannot drift from its status.
+  // What is gathered is the service's own choice, so the wording cannot drift from its status. The state folder is an
+  // empty one, so a voice picked in this clone's own app (its voice.json) is not read, and whether a voice that runs on
+  // this computer is installed is said here, not asked of this computer.
   const root = join(import.meta.dirname, "..", "..");
-  const noKey = await gather(root, { PATH: process.env.PATH, ELEVENLABS_API_KEY: "" });
-  assert.equal(noKey.voice.note, NO_KEY_NOTE);
-  assert.deepEqual((await gather(root, { PATH: process.env.PATH, ELEVENLABS_API_KEY: "a-key" })).voice, {});
-  assert.match((await gather(root, { PATH: process.env.PATH, SCENES_VOICE: "say" })).voice.note ?? "", /robotic.*SCENES_VOICE=say.*quick test/);
-  // Kokoro: named when installed, and how to install it when it is asked for and not there.
-  assert.deepEqual((await gather(root, { PATH: process.env.PATH, ELEVENLABS_API_KEY: "", SPEECHIFY_API_KEY: "a-key" })).voice, { kind: "speechify" });
-  const kokoro = await gather(root, { PATH: process.env.PATH, SCENES_VOICE: "kokoro" });
-  const { kokoroInstalled } = (await import("../../services/scenes/src/kokoro.ts" as string)) as { kokoroInstalled(): boolean };
-  if (kokoroInstalled()) assert.deepEqual(voiceLine(kokoro.voice), { status: "ok", text: "Voice: Kokoro, on this computer" });
-  else assert.match(voiceLine(kokoro.voice).text, /^The voice setting is wrong: SCENES_VOICE=kokoro needs it installed on this computer: run opensourcebook voice install kokoro\.$/);
+  const state = mkdtempSync(join(tmpdir(), "opensourcebook-check-state-"));
+  try {
+    const base = { PATH: process.env.PATH, OPENSOURCEBOOK_STATE: state };
+    for (const installed of [true, false]) {
+      const facts = { kokoro: installed };
+      const noKey = await gather(root, { ...base, ELEVENLABS_API_KEY: "" }, { voicesInstalled: facts });
+      assert.equal(noKey.voice.note, NO_KEY_NOTE, `no key is no sound, kokoro installed or not (${installed})`);
+      assert.deepEqual((await gather(root, { ...base, ELEVENLABS_API_KEY: "a-key" }, { voicesInstalled: facts })).voice, {});
+      assert.match((await gather(root, { ...base, SCENES_VOICE: "say" }, { voicesInstalled: facts })).voice.note ?? "", /robotic.*SCENES_VOICE=say.*quick test/);
+      assert.deepEqual((await gather(root, { ...base, ELEVENLABS_API_KEY: "", SPEECHIFY_API_KEY: "a-key" }, { voicesInstalled: facts })).voice, { kind: "speechify" });
+    }
+    // Kokoro: named when installed, and how to install it when it is asked for and not there.
+    const there = await gather(root, { ...base, SCENES_VOICE: "kokoro" }, { voicesInstalled: { kokoro: true } });
+    assert.deepEqual(voiceLine(there.voice), { status: "ok", text: "Voice: Kokoro, on this computer" });
+    const missing = await gather(root, { ...base, SCENES_VOICE: "kokoro" }, { voicesInstalled: { kokoro: false } });
+    assert.match(voiceLine(missing.voice).text, /^The voice setting is wrong: SCENES_VOICE=kokoro needs it installed on this computer: run opensourcebook voice install kokoro\.$/);
+  } finally {
+    rmSync(state, { recursive: true, force: true });
+  }
 });
 
 test("voice: the voice chosen in the app's private file wins over the settings, as the scenes service reads it", async () => {
