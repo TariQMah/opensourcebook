@@ -118,6 +118,9 @@ function length(seconds: number | undefined): string | undefined {
 }
 
 /** The note for the video agent: what the video is and where its files are. Knowledge, no rules. */
+/** A count with its word, "1 passage" or "3 passages". */
+const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
+
 function readme(request: VideoRequest, entries: SourceEntry[], passages: Map<string, number>, pictures: Map<string, number>): string {
   const long = length(request.targetSeconds);
   const lines = [`# ${request.title}`, "", "This folder is one video being made, with its sources and what was read from them.", ""];
@@ -134,7 +137,7 @@ function readme(request: VideoRequest, entries: SourceEntry[], passages: Map<str
   lines.push("- `work/` (`./` from inside it): the agent's own folder for this video, its `skills/` and what it writes.", "", "## Sources", "");
   for (const e of entries) {
     const count = pictures.get(e.id) ?? 0;
-    lines.push(`- ${e.title} (${e.kind}): \`../${e.extracted}/text.md\`, ${passages.get(e.id) ?? 0} passages${count ? `, ${count} pictures` : ""}${e.link ? `, the original at \`../${e.link}\`` : ""}${e.url ? `, from ${e.url}` : ""}`);
+    lines.push(`- ${e.title} (${e.kind}): \`../${e.extracted}/text.md\`, ${plural(passages.get(e.id) ?? 0, "passage")}${count ? `, ${plural(count, "picture")}` : ""}${e.link ? `, the original at \`../${e.link}\`` : ""}${e.url ? `, from ${e.url}` : ""}`);
   }
   return `${lines.join("\n")}\n`;
 }

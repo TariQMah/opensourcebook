@@ -83,8 +83,8 @@ test("the job folder holds the note, a link to each file on disk, the sources li
   assert.match(note, /- What a cell is/);
   assert.match(note, /Length: about 2 minutes\./);
   // Each path as the agent reaches it from its own folder, work/, one level down.
-  assert.match(note, /- Chapter 4 \(pdf\): `\.\.\/extracted\/src_a\/text\.md`, 2 passages, 1 pictures, the original at `\.\.\/sources\/src_a-chapter-4\.pdf`/);
-  assert.match(note, /- A page \(web\): `\.\.\/extracted\/web-1\/text\.md`, 1 passages, from https:\/\/example\.org\/page/);
+  assert.match(note, /- Chapter 4 \(pdf\): `\.\.\/extracted\/src_a\/text\.md`, 2 passages, 1 picture, the original at `\.\.\/sources\/src_a-chapter-4\.pdf`/);
+  assert.match(note, /- A page \(web\): `\.\.\/extracted\/web-1\/text\.md`, 1 passage, from https:\/\/example\.org\/page/);
   for (const path of ["../README.md", "../sources/sources.json", "../sources/", "../extracted/<source>/text.md", "../extracted/<source>/pictures/", "work/"]) assert.ok(note.includes(`\`${path}\``), path);
   assert.deepEqual([...BESIDE_WORK], ["README.md", "sources", "extracted"]);
 });
