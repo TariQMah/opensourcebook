@@ -286,7 +286,7 @@ export function GetSetUp({ onReady }: { onReady?: (ready: boolean) => void }) {
         <Row
           ok={v ? !!v.service : undefined}
           title="A voice"
-          said={!v ? (voice.error !== undefined ? errorText(voice.error) : "…") : inUse ? `Videos and audio speak with ${inUse.label}${v.voice ? `, ${v.voice.label}` : ""}.` : "None yet: videos have captions and no sound, and audio can't be made."}
+          said={!v ? (voice.error !== undefined ? errorText(voice.error) : "…") : inUse ? `Videos and audio have a voice: ${inUse.label}${v.voice ? `, ${v.voice.label}` : ""}.` : "None yet: videos have captions and no sound, and audio can't be made."}
         >
           {v && !v.service && (
             <>
@@ -305,7 +305,7 @@ export function GetSetUp({ onReady }: { onReady?: (ready: boolean) => void }) {
               )}
               {guided.map((s) => (
                 <OutlineButton key={s.id} aria-expanded={keyFor === s.id} onClick={() => setKeyFor(keyFor === s.id ? undefined : s.id)}>
-                  Use a {s.label} key instead
+                  Use your {s.label} key instead
                 </OutlineButton>
               ))}
             </>

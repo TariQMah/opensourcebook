@@ -40,7 +40,7 @@ test("everything there: each row says what it found, and Check again asks the co
   expect(await screen.findByText("Alpha is installed.")).toBeInTheDocument();
   expect(screen.getByText("Alpha is signed in.")).toBeInTheDocument();
   expect(screen.getByText(/Here\. It puts the pictures/)).toBeInTheDocument();
-  expect(await screen.findByText("Videos and audio speak with Hosted A, Warm.")).toBeInTheDocument();
+  expect(await screen.findByText("Videos and audio have a voice: Hosted A, Warm.")).toBeInTheDocument();
   const asked = calls.filter((c) => c.path === "/v1/providers").length;
   await userEvent.click(screen.getByRole("button", { name: "Check again" }));
   await vi.waitFor(() => expect(calls.filter((c) => c.path === "/v1/providers").length).toBe(asked + 1));
@@ -129,10 +129,10 @@ test("no voice: the free voice is installed by the launcher and made the voice i
   });
   const voiceRow = await vi.waitFor(() => row("A voice"));
   expect(await within(voiceRow).findByText(/None yet: videos have captions and no sound/)).toBeInTheDocument();
-  await userEvent.click(within(voiceRow).getByRole("button", { name: "Use a Hosted A key instead" }));
+  await userEvent.click(within(voiceRow).getByRole("button", { name: "Use your Hosted A key instead" }));
   expect(within(screen.getByRole("list", { name: "How to get a Hosted A key" })).getAllByRole("listitem").map((li) => li.textContent)).toEqual(["Make an account.", "Paste the key here."]);
   await userEvent.click(within(voiceRow).getByRole("button", { name: "Set up the free voice" }));
-  expect(await screen.findByText("Videos and audio speak with On this computer.")).toBeInTheDocument();
+  expect(await screen.findByText("Videos and audio have a voice: On this computer.")).toBeInTheDocument();
   expect(calls.some((c) => c.method === "POST" && c.path === "/launcher/voices/local-b/install")).toBe(true);
   expect(calls.find((c) => c.method === "PUT" && c.path === "/v1/voice")?.body).toEqual({ service: "local-b", voice: null });
 });
