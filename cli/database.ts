@@ -11,6 +11,7 @@ import { spawn, spawnSync } from "node:child_process";
 import { createHash, createHmac } from "node:crypto";
 import { createWriteStream, existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
+import { appDataOf, engineState } from "./app-data.ts";
 
 /** The migration files, in the order wrangler applies them. */
 export function migrationFiles(engineDir: string): string[] {
@@ -48,8 +49,8 @@ export function databaseId(engineDir: string): string {
   return id;
 }
 
-/** Where wrangler keeps the local database (its default, beside the engine). */
-export const localStateDir = (engineDir: string) => join(engineDir, ".wrangler", "state", "v3", "d1");
+/** Where wrangler keeps the local database: its default beside the engine, or the app data folder's `data/` (app-data.ts). */
+export const localStateDir = (engineDir: string) => join(engineState(engineDir), "v3", "d1");
 
 /** The folder of local D1's database files. */
 export const databaseFiles = (engineDir: string) => join(localStateDir(engineDir), "miniflare-D1DatabaseObject");
@@ -144,7 +145,7 @@ export function earlierLine(engineDir: string, root: string, earlier: Earlier[])
 
 /** The arguments for wrangler: apply every migration to the local database. Never remote. */
 export function migrateArgs(engineDir: string): string[] {
-  return [join("node_modules", "wrangler", "bin", "wrangler.js"), "d1", "migrations", "apply", databaseName(engineDir), "--local", "--config", engineConfig(engineDir)];
+  return [join("node_modules", "wrangler", "bin", "wrangler.js"), "d1", "migrations", "apply", databaseName(engineDir), "--local", "--config", engineConfig(engineDir), ...(appDataOf(process.env) ? ["--persist-to", engineState(engineDir)] : [])];
 }
 
 /** Applies the migrations. Resolves with whether it worked; wrangler's output goes to the log. */

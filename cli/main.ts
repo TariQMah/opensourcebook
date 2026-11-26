@@ -14,6 +14,7 @@ import { newRunKeys } from "./opener.ts";
 import { join } from "node:path";
 import { gather, lines, render } from "./check.ts";
 import { CHROME_SIZE, downloadChrome, dropSecondCopy, findChrome } from "./chrome.ts";
+import { appDataOf, engineState, useAppData } from "./app-data.ts";
 import { databaseId, earlierDatabases, earlierLine, migrate, migrationFiles, needsMigrations, pastDatabaseIds, type Applied } from "./database.ts";
 import { build, buildFailed, isStale, planBuild, type Plan } from "./build.ts";
 import { install, installParts, linkedLine, linkedPackages, missingPackages, took, type Part } from "./install.ts";
@@ -240,7 +241,7 @@ async function startClaimed(options: Options): Promise<number> {
  * service's jobs) are made readable by that person only, like `.opensourcebook/`, wherever the copy of Open Sourcebook sits.
  */
 export function keepPrivate(root: string, env: NodeJS.ProcessEnv = process.env): void {
-  for (const dir of [join(root, "engine", ".wrangler"), env.SCENES_DATA_DIR?.trim() || join(root, "services", "scenes", ".data")]) {
+  for (const dir of [appDataOf(env) ? engineState(join(root, "engine"), env) : join(root, "engine", ".wrangler"), env.SCENES_DATA_DIR?.trim() || join(root, "services", "scenes", ".data")]) {
     try {
       mkdirSync(dir, { recursive: true, mode: 0o700 });
       chmodSync(dir, 0o700);
@@ -257,6 +258,8 @@ export function keepPrivate(root: string, env: NodeJS.ProcessEnv = process.env):
 export async function main(argv: string[]): Promise<number> {
   // Settings a person still has under their names from before the rename are read as the new ones from here on.
   carryOldNames(process.env);
+  // The desktop app names one folder for everything of the person's: state, the engine's data and the video jobs.
+  useAppData(process.env);
   const { runCommand } = await import("./commands/index.ts");
   return runCommand(argv);
 }

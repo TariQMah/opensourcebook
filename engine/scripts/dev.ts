@@ -5,7 +5,7 @@
  * off unless the person developing Open Sourcebook asks for it with OPENSOURCEBOOK_ENGINE_INSPECTOR=1 (then on 127.0.0.1, at
  * `--inspector-port`).
  *
- *   node scripts/dev.ts --ip 127.0.0.1 --port 8787 --env-file ../.opensourcebook/engine.env [--config wrangler.local.toml]
+ *   node scripts/dev.ts --ip 127.0.0.1 --port 8787 --env-file ../.opensourcebook/engine.env [--config wrangler.local.toml] [--persist-to <folder>]
  *                       [--inspector-port 9230] [--compatibility-flags nodejs_compat]
  */
 import { unstable_readConfig, unstable_startWorker } from "wrangler";
@@ -24,6 +24,8 @@ const flags = flag("compatibility-flags");
 // A shell that still sets the old name (RE_ENGINE_INSPECTOR) is read too.
 const inspect = withNewNames(process.env).OPENSOURCEBOOK_ENGINE_INSPECTOR === "1";
 const inspectorPort = Number(flag("inspector-port") ?? 9229);
+// Where the local database, queue and files are kept: the launcher names the app data folder's `data/` when there is one.
+const persistTo = flag("persist-to");
 
 // The config as wrangler reads it, without the headless-browser binding a deployer's config may name (`[browser]`):
 // on this computer the runtime would answer it by downloading a whole Chrome the first time a page is rendered, and
@@ -38,6 +40,7 @@ const worker = await unstable_startWorker({
     server: { hostname: ip, port },
     inspector: inspect ? { hostname: "127.0.0.1", port: inspectorPort } : false,
     watch: true,
+    ...(persistTo ? { persist: persistTo } : {}),
   },
 });
 await worker.ready;
