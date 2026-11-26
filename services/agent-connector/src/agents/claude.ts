@@ -423,11 +423,23 @@ async function classify(bin: string, seen: StreamFacts, stderr: string): Promise
   return login.signedIn === false ? "agentSignedOut" : "error";
 }
 
-/** Whether the CLI says it is signed in (`claude auth status`); only that one field is read. */
+/**
+ * Whether the CLI says it is signed in (`claude auth status`); only that one field is read. The JSON is read from the
+ * first `{` to the last `}`, as a notice printed before or after it (an update, a warning on Windows) would otherwise
+ * leave a signed-out program counted as ready.
+ */
 async function signedIn(bin: string): Promise<{ signedIn?: boolean }> {
   const { lines } = await allLines(bin, ["auth", "status", "--json"]);
+  return signedInFrom(lines.join("\n"));
+}
+
+/** `loggedIn` from what `claude auth status --json` printed; nothing when it says neither. */
+export function signedInFrom(text: string): { signedIn?: boolean } {
+  const start = text.indexOf("{");
+  const end = text.lastIndexOf("}");
+  if (start < 0 || end < start) return {};
   try {
-    const status = JSON.parse(lines.join("\n")) as { loggedIn?: unknown };
+    const status = JSON.parse(text.slice(start, end + 1)) as { loggedIn?: unknown };
     return typeof status.loggedIn === "boolean" ? { signedIn: status.loggedIn } : {};
   } catch {
     return {};

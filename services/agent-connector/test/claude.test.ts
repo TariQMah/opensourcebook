@@ -4,7 +4,7 @@ import { existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname } from "node:path";
 import { test } from "node:test";
-import { CLAUDE_ON_KEY, claudeAdapter, claudeArgs, readLine, ToolInputs } from "../src/agents/claude.ts";
+import { CLAUDE_ON_KEY, claudeAdapter, claudeArgs, readLine, signedInFrom, ToolInputs } from "../src/agents/claude.ts";
 import { agentBins, createDefaultAgents } from "../src/agents/registry.ts";
 import { claudeLimited, fakeCli } from "./fake-cli.ts";
 
@@ -100,6 +100,13 @@ test("hands on the input of a call to Open Sourcebook's tools while it is writte
     ["reply", '{"blocks": [{"kind"'],
     ["reply", '{"blocks": [{"kind": "paragraph", "text": "Hi'],
   ]);
+});
+
+test("its sign-in is read past a notice printed around the JSON, and nothing is guessed from other words", () => {
+  assert.deepEqual(signedInFrom('Update available: 2.2.0\n{\n  "loggedIn": false,\n  "authMethod": "none"\n}\n'), { signedIn: false });
+  assert.deepEqual(signedInFrom('{"loggedIn":true}\nwarning: something'), { signedIn: true });
+  assert.deepEqual(signedInFrom("Not logged in"), {});
+  assert.deepEqual(signedInFrom(""), {});
 });
 
 const RESULT = `${JSON.stringify({ type: "system", subtype: "init", model: "claude-haiku-5-5" })}\n${JSON.stringify({ type: "result", subtype: "success", is_error: false, result: "Done.", usage: { input_tokens: 4, output_tokens: 5 } })}\n`;
