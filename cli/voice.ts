@@ -59,14 +59,13 @@ export function installVoice(root: string, id: string, log: string, options: { e
     };
     child.stdout.on("data", lines);
     child.stderr.on("data", lines);
+    // Answered once the log is written out, so whoever reads it next sees all of it.
     child.once("error", (error) => {
-      out.end(`\n${error.message}\n`);
-      resolve({ ok: false, log });
+      out.end(`\n${error.message}\n`, () => resolve({ ok: false, log }));
     });
     child.once("close", (code) => {
       if (rest.trim()) options.onLine?.(rest.trim());
-      out.end();
-      resolve({ ok: code === 0, log });
+      out.end(() => resolve({ ok: code === 0, log }));
     });
   });
 }
