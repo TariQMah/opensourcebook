@@ -15,6 +15,15 @@
  *   POST   /phone/code          a new code (the old one stops working)
  *   DELETE /phone/devices/:id   unpairs a device
  *
+ * And what the web app asks of the launcher alone, through `/api/launcher/...` (cli/voice.ts, cli/setup.ts):
+ *
+ *   GET    /launcher/voices/:id               how installing a voice that runs here is going
+ *   POST   /launcher/voices/:id/install       installs it
+ *   GET    /launcher/setup                    what Get set up's buttons can do and how each is going
+ *   POST   /launcher/agents/:id/install       installs an agent from its npm package
+ *   POST   /launcher/agents/:id/sign-in       starts the agent's own sign-in and watches it
+ *   POST   /launcher/tools/ffmpeg             fetches ffmpeg
+ *
  * The same control server lets this computer's browser in (opener.ts): the web app's proxy asks it whether a code
  * someone opened is one the launcher made, and `opensourcebook open` asks it for a new code.
  *
@@ -30,6 +39,7 @@ import type { Device } from "./devices.ts";
 import { DeviceStore } from "./devices.ts";
 import { openDoor, type Door } from "./door.ts";
 import type { OpenCodes, RunKeys } from "./opener.ts";
+import type { SetupActions } from "./setup.ts";
 import type { VoiceInstalls } from "./voice.ts";
 import { PairingCodes } from "./pairing.ts";
 import { encodeQr, svgQr, terminalQr } from "./qr.ts";
@@ -92,6 +102,8 @@ export interface PhoneOptions {
   openCodes?: OpenCodes;
   /** The installs of voices that run on this computer, which the voice screen's button starts (cli/voice.ts). */
   voices?: VoiceInstalls;
+  /** What Get set up's buttons ask for: installing and signing in to an agent, fetching ffmpeg (cli/setup.ts). */
+  setup?: SetupActions;
 }
 
 export interface PhoneStatus {
@@ -264,6 +276,16 @@ export class Phone {
         if (!voices.has(id)) return reply(404, { error: "not_found", message: `"${id}" is not a voice that runs on this computer.` });
         if (req.method === "GET" && !voice[2]) return reply(200, { voice: id, ...voices.state(id) });
         if (req.method === "POST" && voice[2]) return reply(202, { voice: id, ...voices.start(id) });
+      }
+      // Get set up: what its buttons can do and how each is going, and each button.
+      const setup = this.o.setup;
+      if (setup && path === "/launcher/setup" && req.method === "GET") return reply(200, await setup.view());
+      if (setup && path === "/launcher/tools/ffmpeg" && req.method === "POST") return reply(202, setup.fetchFfmpeg());
+      const agent = /^\/launcher\/agents\/([a-z0-9-]{1,40})\/(install|sign-in)$/.exec(path);
+      if (setup && agent && req.method === "POST") {
+        const id = agent[1]!;
+        if (!(await setup.has(id))) return reply(404, { error: "not_found", message: `"${id}" is not an agent Open Sourcebook knows.` });
+        return reply(202, { agent: id, ...(agent[2] === "install" ? await setup.install(id) : await setup.signIn(id)) });
       }
       const device = /^\/phone\/devices\/([0-9a-f]{1,32})$/.exec(path);
       if (req.method === "DELETE" && device) {

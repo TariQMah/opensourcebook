@@ -12,6 +12,7 @@ import { releasePorts } from "./ports.ts";
 import { OpenCodes, openAddress } from "./opener.ts";
 import { LocalFiles } from "./local-files.ts";
 import { VoiceInstalls } from "./voice.ts";
+import { SetupActions, useOwnBins } from "./setup.ts";
 import { Phone, phoneChoice, rememberPhone } from "./phone.ts";
 import { FRONT, PROGRAMS, startOrder, url, type Program, type Wiring } from "./programs.ts";
 import { clearStopRequest, processStart, removeRunning, stamp, stopAskedOf, writeRunning, STOPS_LOG, type ChildRecord } from "./record.ts";
@@ -57,6 +58,9 @@ const howEnded = (code: number | null, signal: NodeJS.Signals | null) => (signal
 export async function run(w: Wiring, options: RunOptions, programs: Program[] = PROGRAMS, policy: RestartPolicy = RESTARTS, front: string = FRONT): Promise<number> {
   const logs = join(w.home, "logs");
   mkdirSync(logs, { recursive: true });
+  // What Open Sourcebook fetched for the person (ffmpeg, an agent a button installed) is found by every program it starts.
+  useOwnBins(w.env, w.home);
+  const setup = new SetupActions({ root: w.root, home: w.home, env: w.env });
   const relative = (path: string) => (path.startsWith(w.root) ? path.slice(w.root.length + 1) : path);
   /** One line about a start, restart or stop: on the screen and kept in stops.log, with the time. */
   const note = (line: string) => {
@@ -85,6 +89,7 @@ export async function run(w: Wiring, options: RunOptions, programs: Program[] = 
     if (stopping) return;
     stopping = true;
     note(`Stopping Open Sourcebook: ${why}`);
+    setup.stop();
     await phone?.stop();
     await files?.stop();
     await stopAll(started);
@@ -231,7 +236,7 @@ export async function run(w: Wiring, options: RunOptions, programs: Program[] = 
   if (options.phone !== undefined) rememberPhone(w.home, options.phone);
   const ansi = Boolean(process.stdout.isTTY) && !process.env.CI;
   if (w.ports.phone && w.ports["phone-control"] && w.ports.web) {
-    phone = new Phone({ home: w.home, webPort: w.ports.web, doorPort: w.ports.phone, controlPort: w.ports["phone-control"], token: w.secrets.PHONE_TOKEN, say, ansi, openCodes, voices: new VoiceInstalls({ root: w.root, home: w.home }), ...(w.keys ? { keys: w.keys } : {}) });
+    phone = new Phone({ home: w.home, webPort: w.ports.web, doorPort: w.ports.phone, controlPort: w.ports["phone-control"], token: w.secrets.PHONE_TOKEN, say, ansi, openCodes, voices: new VoiceInstalls({ root: w.root, home: w.home }), setup, ...(w.keys ? { keys: w.keys } : {}) });
     try {
       await phone.start(options.phone ?? phoneChoice(w.home));
     } catch (error) {
