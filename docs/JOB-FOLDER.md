@@ -77,7 +77,11 @@ A job folder stays after its video is done, failed or stopped, so trying again o
 
 ## The library
 
-When a library folder is set (`SCENES_LIBRARY_DIR`), a finished video is copied there as `<title>.mp4` (` 2`, ` 3` added when that name is taken), once per job, and the copy's path is kept in `job.json` as `library`. With none set, nothing is copied.
+The library is the person's own folder for what they keep: their files and the finished videos. They pick it in Settings, under Library; the usual one is `Documents/Open Sourcebook` in their home folder, and the choice is kept in the launcher's state folder (`library.json`, `cli/local-files.ts`). The app never moves, renames or deletes anything in it.
+
+A finished video is copied, once per job, to the folder the engine names in the request (`library`): the project's linked folder when it is linked to one, else `<library>/<project folder>/`, made when missing. The project folder's name comes from the project's title the first time (characters no system takes turned into spaces) and is kept, so renaming the project never renames it. The video is `<title>.mp4` there (` 2`, ` 3` added when that name is taken), and the copy's path is kept in `job.json` as `library`. A request without `library` (an older engine, or one not on this computer) is copied to `SCENES_LIBRARY_DIR` when that is set, and otherwise not at all.
+
+A source that is a file of a linked folder is sent with its `path`, so `sources/` links to it where it is.
 
 ## Opening it
 
