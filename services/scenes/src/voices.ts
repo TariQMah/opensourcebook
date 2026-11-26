@@ -35,8 +35,11 @@ export interface VoiceService {
   where: "hosted" | "local";
   /** One plain line on what it is. */
   about: string;
-  /** The key it needs: its setting's name (as in `.env`), the words for it, and where a person gets one. */
-  key?: { name: string; label: string; helpUrl: string };
+  /**
+   * The key it needs: its setting's name (as in `.env`), the words for it, where a person gets one, and the few steps
+   * to getting one from a new account, what it costs among them, each one plain sentence.
+   */
+  key?: { name: string; label: string; helpUrl: string; steps?: readonly string[] };
   /** The setting that names the voice it speaks with. */
   voiceSetting?: string;
   /** The voices the person's account has. */

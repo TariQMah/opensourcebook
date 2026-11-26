@@ -37,7 +37,7 @@ function fakeServices(local: { installed: boolean }): () => VoiceService[] {
     label: "Acme",
     where: "hosted",
     about: "A hosted voice for tests.",
-    key: { name: "ACME_KEY", label: "Your Acme key", helpUrl: "https://acme.example/keys" },
+    key: { name: "ACME_KEY", label: "Your Acme key", helpUrl: "https://acme.example/keys", steps: ["Make an account.", "Paste the key here."] },
     voiceSetting: "ACME_VOICE",
     offered: true,
     listVoices: async (key) => {
@@ -99,6 +99,13 @@ test("a refused key is not kept; a good one and one out of credits are, in a fil
   assert.deepEqual(view.services.map((s) => s.id), ["acme", "home"], "only offered services");
   await refused(setup.setKey("acme", { key: "has space" }), 400, "invalid_request");
   await refused(setup.setKey("home", { key: KEY }), 404, "not_found");
+});
+
+test("a service that needs a key says the steps to getting one, in its own words", async () => {
+  const { setup } = setupIn();
+  const services = (await setup.setup()).services;
+  assert.deepEqual(services.find((s) => s.id === "acme")!.keySteps, ["Make an account.", "Paste the key here."]);
+  assert.equal(services.find((s) => s.id === "home")!.keySteps, undefined);
 });
 
 test("choosing a service checks what it needs, and the voice changes at once; none means no sound", async () => {

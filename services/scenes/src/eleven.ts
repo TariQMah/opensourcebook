@@ -335,7 +335,17 @@ export function elevenService(): VoiceService {
     label: "ElevenLabs",
     where: "hosted",
     about: "A hosted voice on your own ElevenLabs account, with real word times; the most natural of these.",
-    key: { name: "ELEVENLABS_API_KEY", label: "Your ElevenLabs key", helpUrl: "https://elevenlabs.io/app/settings/api-keys" },
+    key: {
+      name: "ELEVENLABS_API_KEY",
+      label: "Your ElevenLabs key",
+      helpUrl: "https://elevenlabs.io/app/settings/api-keys",
+      steps: [
+        "Make an account at elevenlabs.io. Its free plan gives a small amount of speech each month, enough to try it; its paid plans give more, as its pricing page says.",
+        "Open Where to get a key, below, and press Create API key.",
+        "If it asks what the key may use, allow Text to Speech, and reading Voices and User.",
+        "Copy the key and paste it here.",
+      ],
+    },
     voiceSetting: "SCENES_ELEVENLABS_VOICE",
     offered: true,
     async listVoices(key, signal) {

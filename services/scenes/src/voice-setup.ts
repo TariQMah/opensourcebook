@@ -22,6 +22,8 @@ export interface VoiceServiceView {
   needsKey: boolean;
   keyLabel?: string;
   keyHelpUrl?: string;
+  /** The steps to getting a key, in the service's own words. */
+  keySteps?: string[];
   keySet?: boolean;
   keyHint?: string;
   installed?: boolean;
@@ -138,7 +140,7 @@ export class VoiceSetup {
       where: s.where,
       about: s.about,
       needsKey: !!s.key,
-      ...(s.key ? { keyLabel: s.key.label, keyHelpUrl: s.key.helpUrl, keySet: !!key } : {}),
+      ...(s.key ? { keyLabel: s.key.label, keyHelpUrl: s.key.helpUrl, ...(s.key.steps?.length ? { keySteps: [...s.key.steps] } : {}), keySet: !!key } : {}),
       ...(key && key.length >= HINT_FROM ? { keyHint: key.slice(-4) } : {}),
       ...(s.installed ? { installed: s.installed() } : {}),
       ...(s.install ? { install: { ...s.install } } : {}),
