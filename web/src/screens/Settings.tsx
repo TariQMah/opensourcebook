@@ -10,6 +10,7 @@ import { reminderState } from "../app/reminders";
 import { AdvancedSettings } from "./settings/AdvancedSettings";
 import { AppearanceSettings } from "./settings/AppearanceSettings";
 import { MakersPhoneList, MakersSettings } from "./settings/MakersSettings";
+import { LibrarySection } from "./settings/LibrarySection";
 import { PhoneSection } from "./settings/PhoneSection";
 import { ProvidersSection } from "./settings/ProvidersSection";
 import { RemindersSection } from "./settings/RemindersSection";
@@ -22,6 +23,7 @@ const SECTIONS = [
   { id: "makers", label: "What makes what", view: () => <MakersSettings /> },
   { id: "providers", label: "Providers", view: () => <ProvidersSection /> },
   { id: "voice", label: "Voice", view: () => <VoiceSettings /> },
+  { id: "library", label: "Library", view: () => <LibrarySection /> },
   { id: "phone", label: "Phone", view: () => <PhoneSection /> },
   { id: "reminders", label: "Reminders", view: () => <RemindersSection /> },
   { id: "appearance", label: "Appearance", view: () => <AppearanceSettings /> },
